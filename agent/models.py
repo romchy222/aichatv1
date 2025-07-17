@@ -89,6 +89,7 @@ class RequestLog(models.Model):
     
     # Knowledge base usage
     kb_entries_used = models.ManyToManyField(FAQEntry, blank=True)
+    kb_entries_used_new = models.ManyToManyField('KnowledgeBaseEntry', blank=True, related_name='request_logs')
     
     class Meta:
         ordering = ['-timestamp']
@@ -208,3 +209,78 @@ class APIKeyConfig(models.Model):
     
     def __str__(self):
         return f"{self.get_provider_display()} API"
+
+
+class SearchQuery(models.Model):
+    """Model to store search queries for knowledge base enhancement"""
+    
+    query = models.TextField()
+    language = models.CharField(max_length=10, default='ru')  # ru, kk, en
+    results_found = models.BooleanField(default=False)
+    ai_response = models.TextField(blank=True, null=True)
+    should_add_to_kb = models.BooleanField(default=False)
+    added_to_kb = models.BooleanField(default=False)
+    session_id = models.CharField(max_length=100, blank=True, null=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    user_agent = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Search Query'
+        verbose_name_plural = 'Search Queries'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Search: {self.query[:50]}..."
+
+
+class KnowledgeBaseEntry(models.Model):
+    """Model for auto-generated knowledge base entries"""
+    
+    CATEGORY_CHOICES = [
+        ('schedules', 'Расписание'),
+        ('documents', 'Документы'),
+        ('scholarships', 'Стипендии'),
+        ('exams', 'Экзамены'),
+        ('administration', 'Администрация'),
+        ('general', 'Общие'),
+        ('fees', 'Оплата'),
+        ('dormitory', 'Общежитие'),
+        ('library', 'Библиотека'),
+        ('services', 'Услуги'),
+    ]
+    
+    SOURCE_CHOICES = [
+        ('manual', 'Ручное добавление'),
+        ('ai_generated', 'Создано AI'),
+        ('search_based', 'На основе поиска'),
+    ]
+    
+    question = models.TextField()
+    answer = models.TextField()
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='general')
+    keywords = models.TextField(help_text="Ключевые слова для поиска, разделенные пробелами")
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    language = models.CharField(max_length=10, default='ru')  # ru, kk, en
+    confidence_score = models.FloatField(default=0.0)  # AI confidence in the answer
+    is_active = models.BooleanField(default=True)
+    is_verified = models.BooleanField(default=False)  # Admin verification
+    usage_count = models.IntegerField(default=0)
+    last_used = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Knowledge Base Entry'
+        verbose_name_plural = 'Knowledge Base Entries'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.question[:50]}..."
+    
+    def increment_usage(self):
+        """Increment usage count and update last used timestamp"""
+        from django.utils import timezone
+        self.usage_count += 1
+        self.last_used = timezone.now()
+        self.save(update_fields=['usage_count', 'last_used'])

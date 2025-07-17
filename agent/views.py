@@ -140,21 +140,27 @@ class ChatAPIView(View):
 
 
 class FAQView(View):
-    """FAQ search and display view"""
+    """FAQ search and display view with enhanced logging"""
     
     def get(self, request):
-        """Handle FAQ search"""
+        """Handle FAQ search with automatic query logging"""
         
         form = FAQSearchForm(request.GET)
         entries = []
         
         if form.is_valid():
-            query = form.cleaned_data.get('query', '')
+            query = form.cleaned_data.get('q', '')
             category = form.cleaned_data.get('category', '')
             
             if query or category:
+                # Log the search query
+                self.log_search_query(request, query)
+                
                 kb_manager = KnowledgeBaseManager()
                 entries = kb_manager.search_faq(query, category, limit=20)
+                
+                # Update search query with results
+                self.update_search_results(query, entries)
         
         return JsonResponse({
             'success': True,
@@ -169,6 +175,59 @@ class FAQView(View):
                 for entry in entries
             ]
         })
+    
+    def log_search_query(self, request, query):
+        """Log search query for knowledge base enhancement"""
+        from .models import SearchQuery
+        
+        # Detect language
+        language = 'ru'  # Default to Russian
+        if any(char in query for char in 'abcdefghijklmnopqrstuvwxyz'):
+            # Contains Latin characters, might be English
+            english_words = ['schedule', 'document', 'exam', 'scholarship', 'admin']
+            if any(word in query.lower() for word in english_words):
+                language = 'en'
+        
+        # Get client info
+        session_id = request.session.session_key
+        ip_address = request.META.get('REMOTE_ADDR')
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        
+        # Check if similar query exists recently
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        recent_threshold = timezone.now() - timedelta(hours=1)
+        existing_query = SearchQuery.objects.filter(
+            query=query,
+            session_id=session_id,
+            created_at__gte=recent_threshold
+        ).first()
+        
+        if not existing_query:
+            SearchQuery.objects.create(
+                query=query,
+                language=language,
+                session_id=session_id,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+    
+    def update_search_results(self, query, entries):
+        """Update search query with results found"""
+        from .models import SearchQuery
+        
+        # Find the most recent search query
+        search_query = SearchQuery.objects.filter(query=query).order_by('-created_at').first()
+        
+        if search_query:
+            search_query.results_found = len(entries) > 0
+            search_query.save()
+            
+            # If no results found, mark for potential KB addition
+            if not entries:
+                search_query.should_add_to_kb = True
+                search_query.save()
 
 
 class ChatHistoryView(View):

@@ -468,7 +468,7 @@ html, body {
 .send-button {
     position: absolute;
     right: 8px;
-    bottom: 8px;
+    bottom: 15px;
     width: 36px;
     height: 36px;
     border: none;

@@ -25,7 +25,7 @@ class ChatMessageForm(forms.Form):
 class FAQSearchForm(forms.Form):
     """Form for searching FAQ entries"""
     
-    query = forms.CharField(
+    q = forms.CharField(
         widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'Search FAQ...',

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.http import HttpResponseRedirect
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig
+from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry
 
 
 @admin.register(FAQEntry)
@@ -187,6 +187,110 @@ class APIKeyConfigAdmin(admin.ModelAdmin):
     
     activate_api.short_description = "Activate selected API configuration"
     actions = ['activate_api']
+
+
+@admin.register(SearchQuery)
+class SearchQueryAdmin(admin.ModelAdmin):
+    list_display = ('query_preview', 'language', 'results_found', 'should_add_to_kb', 'added_to_kb', 'created_at')
+    list_filter = ('language', 'results_found', 'should_add_to_kb', 'added_to_kb', 'created_at')
+    search_fields = ('query', 'ai_response')
+    readonly_fields = ('created_at', 'session_id', 'ip_address', 'user_agent')
+    
+    fieldsets = (
+        ('Search Information', {
+            'fields': ('query', 'language', 'results_found')
+        }),
+        ('AI Response', {
+            'fields': ('ai_response',),
+            'classes': ('collapse',)
+        }),
+        ('Knowledge Base Status', {
+            'fields': ('should_add_to_kb', 'added_to_kb')
+        }),
+        ('Technical Details', {
+            'fields': ('session_id', 'ip_address', 'user_agent', 'created_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def query_preview(self, obj):
+        """Show preview of search query"""
+        return obj.query[:100] + "..." if len(obj.query) > 100 else obj.query
+    query_preview.short_description = 'Query'
+    
+    def generate_kb_entry(self, request, queryset):
+        """Custom action to generate knowledge base entries from search queries"""
+        generated_count = 0
+        
+        for query in queryset:
+            if not query.should_add_to_kb or query.added_to_kb:
+                continue
+                
+            # Create KB entry from search query
+            kb_entry = KnowledgeBaseEntry.objects.create(
+                question=query.query,
+                answer=query.ai_response or "Информация уточняется",
+                category='general',
+                keywords=query.query.lower(),
+                source='search_based',
+                language=query.language,
+                confidence_score=0.7,
+                is_verified=False
+            )
+            
+            # Mark as added to KB
+            query.added_to_kb = True
+            query.save()
+            
+            generated_count += 1
+        
+        self.message_user(request, f"Generated {generated_count} knowledge base entries from search queries!")
+    
+    generate_kb_entry.short_description = "Generate KB entries from selected queries"
+    actions = ['generate_kb_entry']
+
+
+@admin.register(KnowledgeBaseEntry)
+class KnowledgeBaseEntryAdmin(admin.ModelAdmin):
+    list_display = ('question_preview', 'category', 'language', 'source', 'confidence_score', 'is_verified', 'is_active', 'usage_count', 'created_at')
+    list_filter = ('category', 'language', 'source', 'is_verified', 'is_active', 'created_at')
+    search_fields = ('question', 'answer', 'keywords')
+    list_editable = ('is_active', 'is_verified')
+    
+    fieldsets = (
+        ('Content', {
+            'fields': ('question', 'answer', 'category', 'language')
+        }),
+        ('Metadata', {
+            'fields': ('keywords', 'source', 'confidence_score')
+        }),
+        ('Status', {
+            'fields': ('is_active', 'is_verified')
+        }),
+        ('Usage Statistics', {
+            'fields': ('usage_count', 'last_used'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ('usage_count', 'last_used', 'created_at', 'updated_at')
+    
+    def question_preview(self, obj):
+        """Show preview of question"""
+        return obj.question[:80] + "..." if len(obj.question) > 80 else obj.question
+    question_preview.short_description = 'Question'
+    
+    def verify_entry(self, request, queryset):
+        """Custom action to verify selected entries"""
+        queryset.update(is_verified=True)
+        self.message_user(request, f"Verified {queryset.count()} knowledge base entries!")
+    
+    verify_entry.short_description = "Verify selected entries"
+    actions = ['verify_entry']
 
 
 # Custom admin site customization
