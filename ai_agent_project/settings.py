@@ -103,7 +103,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 # Together.ai API configuration
-TOGETHER_API_KEY = os.getenv('TOGETHER_API_KEY', 'your_together_api_key_here')
+TOGETHER_API_KEY = os.getenv('TOGETHER_API_KEY', 'f2938e044cbbffdfe7d30ae4f25109d8f71c57cb775280a85f62dab4c9d59337')
 TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions'
 
 # Logging configuration
@@ -125,3 +125,7 @@ LOGGING = {
         },
     },
 }
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.replit.dev"
+]

@@ -8,6 +8,20 @@ This is a Django-based AI chat assistant application that provides an interactiv
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+- **July 17, 2025**: Updated color scheme to modern AI-focused palette
+  - Primary: #0D1B2A (dark navy)
+  - Accent: #00AEEF (bright blue)
+  - Secondary: #F0F0F0 (light gray)
+  - Text: #222222 (near black)
+  - Highlight: #A3D900 (lime green)
+- **July 17, 2025**: Implemented ChatGPT/GigaChat-style modern interface
+  - Glassmorphism effects with backdrop blur
+  - Gradient buttons and avatars
+  - Enhanced message bubbles with better spacing
+  - Improved typography and animations
+
 ## System Architecture
 
 ### Backend Architecture
