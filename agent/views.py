@@ -252,3 +252,57 @@ class AnalyticsView(View):
                 for log in recent_logs
             ]
         })
+
+
+class SystemStatusView(View):
+    """System status view for admin dashboard"""
+    
+    def get(self, request):
+        """Get current system configuration status"""
+        
+        if not request.user.is_staff:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized'
+            }, status=403)
+        
+        from .models import AIModelConfig, SystemPrompt, APIKeyConfig
+        
+        # Get active configurations
+        active_model = AIModelConfig.objects.filter(is_active=True).first()
+        active_prompt = SystemPrompt.objects.filter(prompt_type='system', is_active=True).first()
+        active_api = APIKeyConfig.objects.filter(is_active=True).first()
+        
+        # Get total counts
+        total_models = AIModelConfig.objects.count()
+        total_prompts = SystemPrompt.objects.count()
+        total_apis = APIKeyConfig.objects.count()
+        
+        return JsonResponse({
+            'success': True,
+            'current_config': {
+                'model': {
+                    'name': active_model.name if active_model else 'None',
+                    'model_name': active_model.model_name if active_model else 'None',
+                    'max_tokens': active_model.max_tokens if active_model else 0,
+                    'temperature': active_model.temperature if active_model else 0.0,
+                    'is_active': bool(active_model)
+                },
+                'prompt': {
+                    'name': active_prompt.name if active_prompt else 'None',
+                    'type': active_prompt.prompt_type if active_prompt else 'None',
+                    'is_active': bool(active_prompt)
+                },
+                'api': {
+                    'provider': active_api.provider if active_api else 'None',
+                    'url': active_api.api_url if active_api else 'None',
+                    'is_active': bool(active_api)
+                }
+            },
+            'counts': {
+                'total_models': total_models,
+                'total_prompts': total_prompts,
+                'total_apis': total_apis,
+                'total_faq_entries': FAQEntry.objects.filter(is_active=True).count()
+            }
+        })

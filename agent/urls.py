@@ -12,4 +12,5 @@ urlpatterns = [
     path('api/faq/', views.FAQView.as_view(), name='faq_api'),
     path('api/history/', views.ChatHistoryView.as_view(), name='history_api'),
     path('api/analytics/', views.AnalyticsView.as_view(), name='analytics_api'),
+    path('api/system-status/', views.SystemStatusView.as_view(), name='system_status_api'),
 ]

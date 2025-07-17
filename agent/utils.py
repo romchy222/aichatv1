@@ -3,7 +3,7 @@ import json
 import time
 import logging
 from django.conf import settings
-from .models import FAQEntry, RequestLog, ChatSession
+from .models import FAQEntry, RequestLog, ChatSession, AIModelConfig, SystemPrompt, APIKeyConfig
 from django.db.models import Q
 
 logger = logging.getLogger('agent')
@@ -13,11 +13,42 @@ class TogetherAIClient:
     """Client for interacting with Together.ai API"""
     
     def __init__(self):
-        self.api_key = settings.TOGETHER_API_KEY
-        self.api_url = settings.TOGETHER_API_URL
-        self.model = "mistralai/Mistral-7B-Instruct-v0.1"
+        # Get active API configuration
+        try:
+            api_config = APIKeyConfig.objects.filter(provider='together', is_active=True).first()
+            if api_config:
+                self.api_key = api_config.api_key
+                self.api_url = api_config.api_url
+            else:
+                self.api_key = settings.TOGETHER_API_KEY
+                self.api_url = settings.TOGETHER_API_URL
+        except:
+            self.api_key = settings.TOGETHER_API_KEY
+            self.api_url = settings.TOGETHER_API_URL
         
-    def generate_response(self, messages, max_tokens=500, temperature=0.7):
+        # Get active model configuration
+        try:
+            model_config = AIModelConfig.objects.filter(is_active=True).first()
+            if model_config:
+                self.model = model_config.model_name
+                self.max_tokens = model_config.max_tokens
+                self.temperature = model_config.temperature
+                self.top_p = model_config.top_p
+                self.repetition_penalty = model_config.repetition_penalty
+            else:
+                self.model = "mistralai/Mistral-7B-Instruct-v0.1"
+                self.max_tokens = 500
+                self.temperature = 0.7
+                self.top_p = 0.9
+                self.repetition_penalty = 1.0
+        except:
+            self.model = "mistralai/Mistral-7B-Instruct-v0.1"
+            self.max_tokens = 500
+            self.temperature = 0.7
+            self.top_p = 0.9
+            self.repetition_penalty = 1.0
+        
+    def generate_response(self, messages, max_tokens=None, temperature=None):
         """Generate AI response using Together.ai API"""
         
         headers = {
@@ -28,8 +59,10 @@ class TogetherAIClient:
         payload = {
             'model': self.model,
             'messages': messages,
-            'max_tokens': max_tokens,
-            'temperature': temperature,
+            'max_tokens': max_tokens or self.max_tokens,
+            'temperature': temperature or self.temperature,
+            'top_p': self.top_p,
+            'repetition_penalty': self.repetition_penalty,
             'stream': False
         }
         
@@ -168,14 +201,25 @@ class ChatManager:
             for entry in kb_entries:
                 context += f"Q: {entry.question}\nA: {entry.answer}\n\n"
         
-        # Build messages for AI
-        system_message = {
-            "role": "system",
-            "content": """You are a helpful AI assistant for a university or educational institution. 
+        # Get active system prompt
+        try:
+            system_prompt = SystemPrompt.objects.filter(prompt_type='system', is_active=True).first()
+            system_content = system_prompt.content if system_prompt else """You are a helpful AI assistant for a university or educational institution. 
             Use the provided knowledge base information to answer questions about schedules, documents, 
             scholarships, exams, and administration. If you don't find relevant information in the 
             knowledge base, provide general helpful guidance and suggest contacting the appropriate 
             department."""
+        except:
+            system_content = """You are a helpful AI assistant for a university or educational institution. 
+            Use the provided knowledge base information to answer questions about schedules, documents, 
+            scholarships, exams, and administration. If you don't find relevant information in the 
+            knowledge base, provide general helpful guidance and suggest contacting the appropriate 
+            department."""
+        
+        # Build messages for AI
+        system_message = {
+            "role": "system",
+            "content": system_content
         }
         
         if context:

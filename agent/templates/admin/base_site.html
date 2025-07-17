@@ -1,0 +1,238 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}" style="color: #00AEEF; text-decoration: none;">
+        🤖 AI Chat Assistant - Super Admin
+    </a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Custom admin styling with our color scheme */
+    #header {
+        background: linear-gradient(135deg, #0D1B2A 0%, #00AEEF 100%);
+        color: #F0F0F0;
+    }
+    
+    #branding h1 {
+        color: #F0F0F0;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    #branding h1 a:link, #branding h1 a:visited {
+        color: #F0F0F0;
+    }
+    
+    .module h2, .module caption, .inline-group h2 {
+        background: linear-gradient(135deg, #00AEEF 0%, #A3D900 100%);
+        color: #0D1B2A;
+        font-weight: 600;
+    }
+    
+    .button, input[type=submit], input[type=button], .submit-row input, a.button {
+        background: linear-gradient(135deg, #00AEEF 0%, #A3D900 100%);
+        color: #0D1B2A;
+        border: none;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .button:hover, input[type=submit]:hover, input[type=button]:hover, .submit-row input:hover, a.button:hover {
+        background: linear-gradient(135deg, #A3D900 0%, #00AEEF 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,174,239,0.3);
+    }
+    
+    .selector-chosen h2 {
+        background: #A3D900;
+        color: #0D1B2A;
+    }
+    
+    .breadcrumbs {
+        background: rgba(0, 174, 239, 0.1);
+        color: #0D1B2A;
+        border-bottom: 1px solid #00AEEF;
+    }
+    
+    .breadcrumbs a {
+        color: #00AEEF;
+        font-weight: 500;
+    }
+    
+    .dashboard .module table th {
+        background: #00AEEF;
+        color: #F0F0F0;
+    }
+    
+    .dashboard .module table td a {
+        color: #0D1B2A;
+        font-weight: 500;
+    }
+    
+    .dashboard .module table td a:hover {
+        color: #00AEEF;
+    }
+    
+    .dashboard #content {
+        width: 100%;
+    }
+    
+    .dashboard #content-main {
+        float: none;
+        width: 100%;
+    }
+    
+    .dashboard .module {
+        margin-bottom: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .messagelist .success {
+        background: #A3D900;
+        color: #0D1B2A;
+    }
+    
+    .messagelist .error {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .messagelist .warning {
+        background: #ffc107;
+        color: #0D1B2A;
+    }
+    
+    /* Custom dashboard styling */
+    .dashboard-section {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .dashboard-section h2 {
+        color: #0D1B2A;
+        border-bottom: 2px solid #00AEEF;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .status-active {
+        background: #A3D900;
+    }
+    
+    .status-inactive {
+        background: #dc3545;
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+    
+    .quick-action-btn {
+        background: linear-gradient(135deg, #00AEEF 0%, #A3D900 100%);
+        color: #0D1B2A;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .quick-action-btn:hover {
+        background: linear-gradient(135deg, #A3D900 0%, #00AEEF 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,174,239,0.3);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    {{ block.super }}
+    
+    {% if user.is_superuser %}
+    <div class="dashboard-section">
+        <h2>🎛️ AI System Status</h2>
+        <div id="ai-status">
+            <p><strong>Current Model:</strong> <span id="current-model">Loading...</span></p>
+            <p><strong>System Prompt:</strong> <span id="current-prompt">Loading...</span></p>
+            <p><strong>API Status:</strong> <span id="api-status">Loading...</span></p>
+        </div>
+        
+        <div class="quick-actions">
+            <a href="{% url 'admin:agent_aimodelconfig_changelist' %}" class="quick-action-btn">
+                🤖 Manage AI Models
+            </a>
+            <a href="{% url 'admin:agent_systemprompt_changelist' %}" class="quick-action-btn">
+                📝 Manage Prompts
+            </a>
+            <a href="{% url 'admin:agent_apikeyconfig_changelist' %}" class="quick-action-btn">
+                🔑 API Configuration
+            </a>
+            <a href="{% url 'admin:agent_faqentry_changelist' %}" class="quick-action-btn">
+                📚 Knowledge Base
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Load current system status
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/system-status/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.current_config;
+                
+                // Update model info
+                document.getElementById('current-model').textContent = 
+                    config.model.name + ' (' + config.model.model_name + ')';
+                
+                // Update prompt info
+                document.getElementById('current-prompt').textContent = 
+                    config.prompt.name + ' (' + config.prompt.type + ')';
+                
+                // Update API status
+                const apiStatusClass = config.api.is_active ? 'status-active' : 'status-inactive';
+                const apiStatusText = config.api.is_active ? 'Active' : 'Inactive';
+                document.getElementById('api-status').innerHTML = 
+                    '<span class="status-indicator ' + apiStatusClass + '"></span>' + apiStatusText + ' (' + config.api.provider + ')';
+            } else {
+                document.getElementById('current-model').textContent = 'Error loading';
+                document.getElementById('current-prompt').textContent = 'Error loading';
+                document.getElementById('api-status').innerHTML = '<span class="status-indicator status-inactive"></span>Error';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading system status:', error);
+            document.getElementById('current-model').textContent = 'Error loading';
+            document.getElementById('current-prompt').textContent = 'Error loading';
+            document.getElementById('api-status').innerHTML = '<span class="status-indicator status-inactive"></span>Error';
+        });
+});
+</script>
+{% endblock %}
