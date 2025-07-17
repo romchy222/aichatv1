@@ -1,162 +1,194 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chat Assistant</title>
+    <meta name="theme-color" content="#ffffff">
+    <title>AI Помощник - Чат</title>
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Font Awesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="{% load static %}{% static 'css/style.css' %}">
+    <link href="{% load static %}{% static 'css/style.css' %}" rel="stylesheet">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
 </head>
 <body>
-    <div class="container-fluid h-100">
-        <div class="row h-100">
-            <!-- Sidebar for FAQ Search -->
-            <div class="col-md-3 bg-light sidebar">
-                <div class="sidebar-header p-3">
-                    <h5><i class="fas fa-question-circle"></i> Knowledge Base</h5>
+    <div class="container-fluid">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <i class="fas fa-robot"></i>
+                    AI Помощник
                 </div>
-                
-                <div class="p-3">
-                    <form id="faq-search-form">
-                        <div class="mb-3">
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="faq-query" 
-                                   placeholder="Search FAQ..."
-                                   autocomplete="off">
-                        </div>
-                        
-                        <div class="mb-3">
-                            <select class="form-select" id="faq-category">
-                                <option value="">All Categories</option>
-                                <option value="schedules">Schedules</option>
-                                <option value="documents">Documents</option>
-                                <option value="scholarships">Scholarships</option>
-                                <option value="exams">Exams</option>
-                                <option value="administration">Administration</option>
-                                <option value="general">General</option>
-                            </select>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary btn-sm w-100">
-                            <i class="fas fa-search"></i> Search
+                <button class="theme-toggle" id="theme-toggle">
+                    <i class="fas fa-moon"></i>
+                    <span class="theme-text">Тёмная тема</span>
+                </button>
+            </div>
+            
+            <div class="faq-search-section">
+                <div class="faq-search-title">
+                    <i class="fas fa-search"></i>
+                    Поиск в базе знаний
+                </div>
+                <input type="text" 
+                       id="faq-search" 
+                       class="faq-search-input" 
+                       placeholder="Введите вопрос для поиска...">
+            </div>
+            
+            <div class="faq-results" id="faq-results">
+                <div class="welcome-message">
+                    <p>Введите вопрос для поиска в базе знаний</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Chat Area -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <i class="fas fa-comments"></i>
+                    Чат с AI помощником
+                </div>
+                <div class="chat-status">
+                    <span class="status-indicator"></span>
+                    Онлайн
+                </div>
+            </div>
+            
+            <div class="messages-container" id="messages-container">
+                <div class="welcome-message" id="welcome-message">
+                    <h3>Добро пожаловать в AI Помощник!</h3>
+                    <p>Я готов помочь вам с вопросами о расписании, документах, стипендиях, экзаменах и администрации.</p>
+                    
+                    <div class="welcome-suggestions">
+                        <button class="suggestion-button" onclick="sendSuggestion('Расписание занятий')">
+                            📅 Расписание занятий
                         </button>
-                    </form>
-                </div>
-                
-                <div class="faq-results" id="faq-results">
-                    <div class="p-3 text-muted text-center">
-                        <i class="fas fa-info-circle"></i>
-                        <p>Search the knowledge base for quick answers</p>
+                        <button class="suggestion-button" onclick="sendSuggestion('Документы для поступления')">
+                            📄 Документы для поступления
+                        </button>
+                        <button class="suggestion-button" onclick="sendSuggestion('Стипендии и льготы')">
+                            💰 Стипендии и льготы
+                        </button>
+                        <button class="suggestion-button" onclick="sendSuggestion('Экзамены и зачеты')">
+                            📝 Экзамены и зачеты
+                        </button>
                     </div>
                 </div>
             </div>
             
-            <!-- Main Chat Area -->
-            <div class="col-md-9 d-flex flex-column chat-container">
-                <!-- Chat Header -->
-                <div class="chat-header text-white p-4">
-                    <h4 class="mb-0">
-                        <i class="fas fa-robot"></i> AI Chat Assistant
-                    </h4>
-                    <small style="opacity: 0.8;">Powered by Mistral 7B • Together.ai</small>
-                </div>
-                
-                <!-- Chat Messages -->
-                <div class="chat-messages flex-grow-1 p-3" id="chat-messages">
-                    <div class="message-container">
-                        <!-- Welcome message -->
-                        <div class="message assistant-message">
-                            <div class="message-avatar">
-                                <i class="fas fa-robot"></i>
-                            </div>
-                            <div class="message-content">
-                                <div class="message-bubble">
-                                    <p>👋 Hello! I'm your AI assistant powered by Mistral 7B. I can help you with questions about:</p>
-                                    <ul style="margin: 10px 0; padding-left: 20px;">
-                                        <li>📅 Class schedules and timetables</li>
-                                        <li>📄 Documents and transcripts</li>
-                                        <li>💰 Scholarships and financial aid</li>
-                                        <li>📚 Exams and academic information</li>
-                                        <li>🏢 Administration and contacts</li>
-                                    </ul>
-                                    <p>How can I assist you today?</p>
-                                </div>
-                                <div class="message-time">
-                                    <small class="text-muted">Just now</small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Chat history will be loaded here -->
-                        <div id="chat-history"></div>
-                    </div>
-                </div>
-                
-                <!-- Chat Input -->
-                <div class="chat-input bg-light p-3 border-top">
-                    <form id="chat-form">
-                        <div class="input-group">
-                            <textarea class="form-control" 
-                                      id="message-input" 
-                                      placeholder="Type your message here..."
-                                      rows="2"
-                                      maxlength="1000"></textarea>
-                            <button class="btn btn-primary" type="submit" id="send-button">
-                                <i class="fas fa-paper-plane"></i> Send
+            <div class="input-area">
+                <div class="input-container">
+                    <form id="chat-form" class="input-form">
+                        <div class="input-wrapper">
+                            <textarea id="message-input" 
+                                     class="message-input" 
+                                     placeholder="Напишите ваш вопрос..."
+                                     rows="1"
+                                     maxlength="2000"></textarea>
+                            <button type="submit" class="send-button" id="send-button">
+                                <i class="fas fa-paper-plane"></i>
                             </button>
-                        </div>
-                        
-                        <div class="mt-2">
-                            <small class="text-muted">
-                                <span id="char-count">0</span>/1000 characters
-                            </small>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Loading Modal -->
-    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-body text-center p-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2 mb-0">Generating response...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <!-- Custom JS -->
+    <script src="{% load static %}{% static 'js/themes.js' %}"></script>
     <script src="{% load static %}{% static 'js/chat.js' %}"></script>
     
     <script>
-        // Initialize chat with session ID
-        const CHAT_CONFIG = {
-            sessionId: '{{ session_id }}',
-            apiUrl: '{% url "agent:chat_api" %}',
-            faqUrl: '{% url "agent:faq_api" %}',
-            historyUrl: '{% url "agent:history_api" %}'
+        // Russian translations for JavaScript
+        window.translations = {
+            'typing': 'печатает...',
+            'error_occurred': 'Произошла ошибка',
+            'try_again': 'Попробуйте еще раз',
+            'no_results': 'Результаты не найдены',
+            'search_placeholder': 'Поиск по базе знаний...',
+            'send_message': 'Отправить сообщение',
+            'you': 'Вы',
+            'assistant': 'Помощник',
+            'copy': 'Копировать',
+            'copied': 'Скопировано!',
+            'regenerate': 'Повторить',
+            'delete': 'Удалить',
+            'confirm_delete': 'Вы уверены, что хотите удалить это сообщение?',
+            'connection_error': 'Ошибка подключения к серверу',
+            'message_too_long': 'Сообщение слишком длинное',
+            'empty_message': 'Сообщение не может быть пустым',
+            'loading': 'Загрузка...',
+            'categories': {
+                'schedules': 'Расписание',
+                'documents': 'Документы',
+                'scholarships': 'Стипендии',
+                'exams': 'Экзамены',
+                'administration': 'Администрация',
+                'general': 'Общие'
+            }
         };
         
-        // Initialize chat when page loads
+        // Initialize session ID
+        let sessionId = localStorage.getItem('sessionId');
+        if (!sessionId) {
+            sessionId = 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('sessionId', sessionId);
+        }
+        
+        // Auto-resize textarea
+        const messageInput = document.getElementById('message-input');
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+        
+        // Send message on Enter (but not Shift+Enter)
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+            }
+        });
+        
+        // Handle suggestion clicks
+        function sendSuggestion(message) {
+            document.getElementById('message-input').value = message;
+            document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+        }
+        
+        // Mobile sidebar toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open');
+        }
+        
+        // Add mobile menu button for small screens
+        if (window.innerWidth <= 768) {
+            const chatHeader = document.querySelector('.chat-header');
+            const mobileMenuBtn = document.createElement('button');
+            mobileMenuBtn.className = 'mobile-menu-btn';
+            mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            mobileMenuBtn.onclick = toggleSidebar;
+            chatHeader.insertBefore(mobileMenuBtn, chatHeader.firstChild);
+        }
+        
+        // Load chat history on page load
         document.addEventListener('DOMContentLoaded', function() {
-            initializeChat(CHAT_CONFIG);
+            loadChatHistory();
         });
     </script>
 </body>
