@@ -10,6 +10,16 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **July 19, 2025**: Implemented comprehensive content moderation system for AI and FAQ
+  - Added ContentFilter model for managing banned words, phrases, and regex patterns
+  - Added ModerationLog model for tracking all moderation actions
+  - Created ContentModerator class with filtering logic for different content types
+  - Integrated moderation into ChatManager for AI responses and user input
+  - Added moderation to FAQ search results
+  - Created admin interface for managing content filters
+  - Added default filters for common inappropriate content in Russian and English
+  - Support for three severity levels: low (warning), medium (censorship), high (blocking)
+  - Language-specific filtering with auto-detection
 - **July 17, 2025**: Complete Russian interface with light/dark themes and ChatGPT-style design
   - Fully russified interface with proper Russian translations
   - Added comprehensive light/dark theme system with CSS variables

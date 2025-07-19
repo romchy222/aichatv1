@@ -98,7 +98,8 @@ class ChatAPIView(View):
             
             # Process message with AI
             chat_manager = ChatManager()
-            ai_response = chat_manager.process_message(message, session_id)
+            ip_address = request.META.get('REMOTE_ADDR')
+            ai_response = chat_manager.process_message(message, session_id, ip_address)
             
             # Save AI response
             if session and ai_response.get('success'):
@@ -157,23 +158,51 @@ class FAQView(View):
                 self.log_search_query(request, query)
                 
                 kb_manager = KnowledgeBaseManager()
-                entries = kb_manager.search_faq(query, category, limit=20)
+                raw_entries = kb_manager.search_faq(query, category, limit=20)
+                
+                # Apply content moderation to FAQ results
+                from .utils import ContentModerator
+                moderator = ContentModerator()
+                session_id = request.session.session_key
+                ip_address = request.META.get('REMOTE_ADDR')
+                
+                filtered_entries = []
+                for entry in raw_entries:
+                    # Filter question
+                    question_mod = moderator.filter_content(
+                        content=entry.question,
+                        content_type='faq_result',
+                        session_id=session_id,
+                        ip_address=ip_address
+                    )
+                    
+                    # Filter answer
+                    answer_mod = moderator.filter_content(
+                        content=entry.answer,
+                        content_type='faq_result',
+                        session_id=session_id,
+                        ip_address=ip_address
+                    )
+                    
+                    # Skip entries that are blocked
+                    if question_mod['action'] == 'blocked' or answer_mod['action'] == 'blocked':
+                        continue
+                    
+                    filtered_entries.append({
+                        'id': entry.id,
+                        'question': question_mod['filtered_content'],
+                        'answer': answer_mod['filtered_content'],
+                        'category': entry.category,
+                        'created_at': entry.created_at.isoformat(),
+                        'moderated': question_mod['is_filtered'] or answer_mod['is_filtered']
+                    })
                 
                 # Update search query with results
-                self.update_search_results(query, entries)
+                self.update_search_results(query, raw_entries)
         
         return JsonResponse({
             'success': True,
-            'entries': [
-                {
-                    'id': entry.id,
-                    'question': entry.question,
-                    'answer': entry.answer,
-                    'category': entry.category,
-                    'created_at': entry.created_at.isoformat()
-                }
-                for entry in entries
-            ]
+            'entries': filtered_entries
         })
     
     def log_search_query(self, request, query):

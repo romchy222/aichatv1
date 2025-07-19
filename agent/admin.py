@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.http import HttpResponseRedirect
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry
+from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry, ContentFilter, ModerationLog
 
 
 @admin.register(FAQEntry)
@@ -291,6 +291,53 @@ class KnowledgeBaseEntryAdmin(admin.ModelAdmin):
     
     verify_entry.short_description = "Verify selected entries"
     actions = ['verify_entry']
+
+
+@admin.register(ContentFilter)
+class ContentFilterAdmin(admin.ModelAdmin):
+    list_display = ('content_preview', 'filter_type', 'severity', 'language', 'is_active', 'created_at')
+    list_filter = ('filter_type', 'severity', 'language', 'is_active', 'applies_to_ai', 'applies_to_faq', 'applies_to_input')
+    search_fields = ('content', 'replacement')
+    list_editable = ('is_active', 'severity')
+    
+    fieldsets = (
+        ('Filter Configuration', {
+            'fields': ('content', 'filter_type', 'severity', 'replacement', 'is_active')
+        }),
+        ('Application Settings', {
+            'fields': ('applies_to_ai', 'applies_to_faq', 'applies_to_input', 'language')
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def content_preview(self, obj):
+        return f"{obj.content[:30]}..." if len(obj.content) > 30 else obj.content
+    content_preview.short_description = 'Content'
+
+
+@admin.register(ModerationLog)
+class ModerationLogAdmin(admin.ModelAdmin):
+    list_display = ('original_content_preview', 'action', 'content_type', 'filter_matched', 'created_at')
+    list_filter = ('action', 'content_type', 'created_at')
+    search_fields = ('original_content', 'modified_content')
+    readonly_fields = ('original_content', 'modified_content', 'action', 'filter_matched', 'content_type', 'session_id', 'ip_address', 'created_at')
+    
+    def original_content_preview(self, obj):
+        return f"{obj.original_content[:50]}..." if len(obj.original_content) > 50 else obj.original_content
+    original_content_preview.short_description = 'Original Content'
+    
+    def has_add_permission(self, request):
+        return False  # Don't allow manual creation of moderation logs
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Don't allow editing of moderation logs
+    
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser  # Only superusers can delete logs
 
 
 # Custom admin site customization

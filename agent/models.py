@@ -234,6 +234,69 @@ class SearchQuery(models.Model):
         return f"Search: {self.query[:50]}..."
 
 
+class ContentFilter(models.Model):
+    """Model to store content filtering rules and banned words"""
+    
+    FILTER_TYPE_CHOICES = [
+        ('banned_word', 'Запрещенное слово'),
+        ('pattern', 'Шаблон (regex)'),
+        ('phrase', 'Запрещенная фраза'),
+    ]
+    
+    SEVERITY_CHOICES = [
+        ('low', 'Низкая (предупреждение)'),
+        ('medium', 'Средняя (цензура)'),
+        ('high', 'Высокая (блокировка)'),
+    ]
+    
+    filter_type = models.CharField(max_length=20, choices=FILTER_TYPE_CHOICES, default='banned_word')
+    content = models.TextField(help_text="Слово, фраза или regex-шаблон для фильтрации")
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='medium')
+    replacement = models.CharField(max_length=200, blank=True, help_text="Замена для цензурируемого контента (по умолчанию: ***)")
+    is_active = models.BooleanField(default=True)
+    applies_to_ai = models.BooleanField(default=True, help_text="Применять к ответам AI")
+    applies_to_faq = models.BooleanField(default=True, help_text="Применять к результатам поиска FAQ")
+    applies_to_input = models.BooleanField(default=True, help_text="Применять к пользовательскому вводу")
+    language = models.CharField(max_length=10, default='all', help_text="Язык (ru/en/kk/all)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Content Filter'
+        verbose_name_plural = 'Content Filters'
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.get_filter_type_display()}: {self.content[:30]}..."
+
+
+class ModerationLog(models.Model):
+    """Model to log content moderation actions"""
+    
+    ACTION_CHOICES = [
+        ('censored', 'Цензурировано'),
+        ('blocked', 'Заблокировано'),
+        ('warned', 'Предупреждение'),
+    ]
+    
+    original_content = models.TextField()
+    modified_content = models.TextField(blank=True)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    filter_matched = models.ForeignKey(ContentFilter, on_delete=models.SET_NULL, null=True)
+    content_type = models.CharField(max_length=20, help_text="ai_response/faq_result/user_input")
+    session_id = models.CharField(max_length=100, blank=True, null=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Moderation Log'
+        verbose_name_plural = 'Moderation Logs'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_action_display()}: {self.original_content[:30]}..."
+
+
 class KnowledgeBaseEntry(models.Model):
     """Model for auto-generated knowledge base entries"""
     

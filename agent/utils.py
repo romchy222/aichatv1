@@ -2,8 +2,9 @@ import requests
 import json
 import time
 import logging
+import re
 from django.conf import settings
-from .models import FAQEntry, RequestLog, ChatSession, AIModelConfig, SystemPrompt, APIKeyConfig, KnowledgeBaseEntry, SearchQuery
+from .models import FAQEntry, RequestLog, ChatSession, AIModelConfig, SystemPrompt, APIKeyConfig, KnowledgeBaseEntry, SearchQuery, ContentFilter, ModerationLog
 from django.db.models import Q
 
 logger = logging.getLogger('agent')
@@ -192,15 +193,260 @@ class KnowledgeBaseManager:
         return unique_entries
 
 
+class ContentModerator:
+    """Manager for content moderation and censorship"""
+    
+    @staticmethod
+    def filter_content(content, content_type='ai_response', language='auto', session_id=None, ip_address=None):
+        """
+        Filter content based on active content filters
+        
+        Args:
+            content: Text content to filter
+            content_type: Type of content (ai_response, faq_result, user_input)
+            language: Language of content (ru, en, kk, auto)
+            session_id: User session ID for logging
+            ip_address: User IP address for logging
+            
+        Returns:
+            dict with filtered content and moderation info
+        """
+        if not content or not content.strip():
+            return {
+                'original_content': content,
+                'filtered_content': content,
+                'is_filtered': False,
+                'action': None,
+                'matched_filters': []
+            }
+        
+        # Auto-detect language if needed
+        if language == 'auto':
+            if re.search(r'[а-яё]', content.lower()):
+                language = 'ru'
+            elif re.search(r'[қғүұңһөәі]', content.lower()):
+                language = 'kk'
+            else:
+                language = 'en'
+        
+        # Get active filters for this content type
+        filter_query = Q(is_active=True)
+        
+        if content_type == 'ai_response':
+            filter_query &= Q(applies_to_ai=True)
+        elif content_type == 'faq_result':
+            filter_query &= Q(applies_to_faq=True)
+        elif content_type == 'user_input':
+            filter_query &= Q(applies_to_input=True)
+        
+        # Filter by language
+        language_filter = Q(language='all') | Q(language=language)
+        filter_query &= language_filter
+        
+        filters = ContentFilter.objects.filter(filter_query).order_by('-severity', '-updated_at')
+        
+        filtered_content = content
+        matched_filters = []
+        highest_severity = 'low'
+        action_taken = None
+        
+        for content_filter in filters:
+            if ContentModerator._matches_filter(filtered_content, content_filter):
+                matched_filters.append(content_filter)
+                
+                if content_filter.severity == 'high' and not action_taken:
+                    # Block content entirely for high severity
+                    filtered_content = "⚠️ Контент заблокирован модератором"
+                    action_taken = 'blocked'
+                    highest_severity = 'high'
+                elif content_filter.severity == 'medium' and action_taken != 'blocked':
+                    # Censor content for medium severity
+                    filtered_content = ContentModerator._apply_censorship(
+                        filtered_content, content_filter
+                    )
+                    action_taken = 'censored'
+                    highest_severity = 'medium'
+                elif content_filter.severity == 'low' and not action_taken:
+                    # Just log for low severity
+                    action_taken = 'warned'
+        
+        # Log moderation action if any filters matched
+        if matched_filters:
+            ContentModerator._log_moderation(
+                original_content=content,
+                modified_content=filtered_content,
+                action=action_taken,
+                filter_matched=matched_filters[0],  # Log the first matched filter
+                content_type=content_type,
+                session_id=session_id,
+                ip_address=ip_address
+            )
+        
+        return {
+            'original_content': content,
+            'filtered_content': filtered_content,
+            'is_filtered': len(matched_filters) > 0,
+            'action': action_taken,
+            'matched_filters': [f.id for f in matched_filters],
+            'severity': highest_severity
+        }
+    
+    @staticmethod
+    def _matches_filter(content, content_filter):
+        """Check if content matches a specific filter"""
+        try:
+            filter_content = content_filter.content.lower()
+            content_lower = content.lower()
+            
+            if content_filter.filter_type == 'banned_word':
+                # Word matching with proper word boundaries for Unicode text
+                pattern = r'(?:^|\s)' + re.escape(filter_content) + r'(?=\s|[^\w]|$)'
+                return bool(re.search(pattern, content_lower, re.IGNORECASE))
+            
+            elif content_filter.filter_type == 'phrase':
+                # Phrase matching
+                return filter_content in content_lower
+            
+            elif content_filter.filter_type == 'pattern':
+                # Regex pattern matching
+                return bool(re.search(content_filter.content, content, re.IGNORECASE))
+        
+        except Exception as e:
+            logger.warning(f"Error matching filter {content_filter.id}: {e}")
+            return False
+        
+        return False
+    
+    @staticmethod
+    def _apply_censorship(content, content_filter):
+        """Apply censorship to content based on filter"""
+        try:
+            replacement = content_filter.replacement or "***"
+            filter_content = content_filter.content
+            
+            if content_filter.filter_type == 'banned_word':
+                # Replace whole words with proper word boundaries
+                pattern = r'(?:^|\s)(' + re.escape(filter_content) + r')(?=\s|[^\w]|$)'
+                return re.sub(pattern, lambda m: m.group().replace(m.group(1), replacement), content, flags=re.IGNORECASE)
+            
+            elif content_filter.filter_type == 'phrase':
+                # Replace phrases
+                return re.sub(re.escape(filter_content), replacement, content, flags=re.IGNORECASE)
+            
+            elif content_filter.filter_type == 'pattern':
+                # Replace regex patterns
+                return re.sub(content_filter.content, replacement, content, flags=re.IGNORECASE)
+        
+        except Exception as e:
+            logger.warning(f"Error applying censorship with filter {content_filter.id}: {e}")
+            return content
+        
+        return content
+    
+    @staticmethod
+    def _log_moderation(original_content, modified_content, action, filter_matched, content_type, session_id=None, ip_address=None):
+        """Log moderation action"""
+        try:
+            ModerationLog.objects.create(
+                original_content=original_content,
+                modified_content=modified_content,
+                action=action,
+                filter_matched=filter_matched,
+                content_type=content_type,
+                session_id=session_id,
+                ip_address=ip_address
+            )
+            logger.info(f"Moderation action logged: {action} for {content_type}")
+        except Exception as e:
+            logger.error(f"Error logging moderation: {e}")
+    
+    @staticmethod
+    def add_default_filters():
+        """Add some default content filters for common inappropriate content"""
+        default_filters = [
+            {
+                'content': 'пизда',
+                'filter_type': 'banned_word',
+                'severity': 'high',
+                'language': 'ru',
+                'replacement': '***'
+            },
+            {
+                'content': 'блядь',
+                'filter_type': 'banned_word',
+                'severity': 'medium',
+                'language': 'ru',
+                'replacement': '***'
+            },
+            {
+                'content': 'сука',
+                'filter_type': 'banned_word',
+                'severity': 'medium',
+                'language': 'ru',
+                'replacement': '***'
+            },
+            {
+                'content': 'shit',
+                'filter_type': 'banned_word',
+                'severity': 'medium',
+                'language': 'en',
+                'replacement': '***'
+            },
+            {
+                'content': 'fuck',
+                'filter_type': 'banned_word',
+                'severity': 'high',
+                'language': 'en',
+                'replacement': '***'
+            }
+        ]
+        
+        for filter_data in default_filters:
+            ContentFilter.objects.get_or_create(
+                content=filter_data['content'],
+                filter_type=filter_data['filter_type'],
+                defaults={
+                    'severity': filter_data['severity'],
+                    'language': filter_data['language'],
+                    'replacement': filter_data['replacement'],
+                    'applies_to_ai': True,
+                    'applies_to_faq': True,
+                    'applies_to_input': True,
+                    'is_active': True
+                }
+            )
+
+
 class ChatManager:
     """Manager for handling chat operations"""
     
     def __init__(self):
         self.ai_client = TogetherAIClient()
         self.kb_manager = KnowledgeBaseManager()
+        self.moderator = ContentModerator()
     
-    def process_message(self, user_message, session_id=None):
-        """Process user message and generate AI response"""
+    def process_message(self, user_message, session_id=None, ip_address=None):
+        """Process user message and generate AI response with content moderation"""
+        
+        # First, filter user input
+        user_moderation = self.moderator.filter_content(
+            content=user_message,
+            content_type='user_input',
+            session_id=session_id,
+            ip_address=ip_address
+        )
+        
+        # Block processing if user input is severely inappropriate
+        if user_moderation['action'] == 'blocked':
+            return {
+                'success': False,
+                'error': 'Сообщение заблокировано модератором',
+                'message': user_moderation['filtered_content'],
+                'moderated': True
+            }
+        
+        # Use filtered user message for processing
+        filtered_user_message = user_moderation['filtered_content']
         
         # Get or create chat session
         session = None
@@ -210,12 +456,12 @@ class ChatManager:
             except ChatSession.DoesNotExist:
                 pass
         
-        # Get relevant context from knowledge base
-        kb_entries = self.kb_manager.get_context_for_ai(user_message)
+        # Get relevant context from knowledge base using filtered message
+        kb_entries = self.kb_manager.get_context_for_ai(filtered_user_message)
         
         # Log search query if no KB entries found
         if not kb_entries:
-            self.log_search_query_for_kb(user_message, session_id)
+            self.log_search_query_for_kb(filtered_user_message, session_id)
         
         # Build context string
         context = ""
@@ -264,13 +510,28 @@ class ChatManager:
         
         messages.append({
             "role": "user",
-            "content": user_message
+            "content": filtered_user_message
         })
         
         # Generate AI response
         ai_response = self.ai_client.generate_response(messages)
         
-        # Log the request
+        # Moderate AI response if successful
+        if ai_response.get('success') and ai_response.get('message'):
+            ai_moderation = self.moderator.filter_content(
+                content=ai_response['message'],
+                content_type='ai_response',
+                session_id=session_id,
+                ip_address=ip_address
+            )
+            
+            # Apply moderation to AI response
+            if ai_moderation['is_filtered']:
+                ai_response['message'] = ai_moderation['filtered_content']
+                ai_response['moderated'] = True
+                ai_response['moderation_action'] = ai_moderation['action']
+        
+        # Log the request (using original user message for logging)
         log_entry = RequestLog.objects.create(
             session=session,
             user_message=user_message,
@@ -294,7 +555,7 @@ class ChatManager:
         
         # Auto-generate KB entry if no existing KB entries and response is good
         if not kb_entries and ai_response.get('success'):
-            self.generate_kb_entry_from_response(user_message, ai_response, session_id)
+            self.generate_kb_entry_from_response(filtered_user_message, ai_response, session_id)
         
         return ai_response
     
