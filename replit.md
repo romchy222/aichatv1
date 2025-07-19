@@ -10,6 +10,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **July 19, 2025**: Added comprehensive file upload and processing system
+  - Created FileUpload model for tracking uploaded files and processing status
+  - Built FileProcessorManager with support for multiple file types:
+    - Images (JPG, PNG, GIF) with basic analysis and OCR placeholder
+    - Documents (DOCX, TXT, PDF) with full text extraction
+    - Spreadsheets (XLSX, CSV) with data parsing and table extraction
+  - Added file upload API endpoints (/api/files/) with 10MB size limit
+  - Integrated drag-and-drop file upload interface in chat
+  - Added file processing status tracking and error handling
+  - Created admin interface for managing uploaded files
+  - Files are processed automatically and content is extracted for AI analysis
 - **July 19, 2025**: Implemented comprehensive content moderation system for AI and FAQ
   - Added ContentFilter model for managing banned words, phrases, and regex patterns
   - Added ModerationLog model for tracking all moderation actions

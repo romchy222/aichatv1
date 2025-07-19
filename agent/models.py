@@ -297,6 +297,76 @@ class ModerationLog(models.Model):
         return f"{self.get_action_display()}: {self.original_content[:30]}..."
 
 
+class FileUpload(models.Model):
+    """Model for handling file uploads and processing"""
+    
+    FILE_TYPE_CHOICES = [
+        ('image', 'Изображение'),
+        ('document', 'Документ'),
+        ('spreadsheet', 'Таблица'),
+        ('pdf', 'PDF'),
+        ('text', 'Текстовый файл'),
+        ('other', 'Другое'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Ожидает обработки'),
+        ('processing', 'Обрабатывается'),
+        ('completed', 'Обработан'),
+        ('failed', 'Ошибка'),
+    ]
+    
+    file = models.FileField(upload_to='uploads/%Y/%m/%d/')
+    original_filename = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='other')
+    file_size = models.BigIntegerField()  # Size in bytes
+    mime_type = models.CharField(max_length=100, blank=True)
+    
+    # Processing status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    extracted_text = models.TextField(blank=True, help_text="Извлеченный из файла текст")
+    analysis_result = models.JSONField(blank=True, null=True, help_text="Результат анализа файла")
+    
+    # Session info
+    session_id = models.CharField(max_length=100, blank=True, null=True)
+    user = models.ForeignKey('auth.User', on_delete=models.SET_NULL, blank=True, null=True)
+    
+    # Timestamps
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(blank=True, null=True)
+    
+    class Meta:
+        verbose_name = 'File Upload'
+        verbose_name_plural = 'File Uploads'
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.original_filename} ({self.get_file_type_display()})"
+    
+    def get_file_extension(self):
+        """Get file extension"""
+        return self.original_filename.split('.')[-1].lower() if '.' in self.original_filename else ''
+    
+    def is_image(self):
+        """Check if file is an image"""
+        image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
+        return self.get_file_extension() in image_extensions
+    
+    def is_document(self):
+        """Check if file is a document"""
+        doc_extensions = ['doc', 'docx', 'txt', 'rtf', 'odt']
+        return self.get_file_extension() in doc_extensions
+    
+    def is_spreadsheet(self):
+        """Check if file is a spreadsheet"""
+        sheet_extensions = ['xls', 'xlsx', 'csv', 'ods']
+        return self.get_file_extension() in sheet_extensions
+    
+    def is_pdf(self):
+        """Check if file is a PDF"""
+        return self.get_file_extension() == 'pdf'
+
+
 class KnowledgeBaseEntry(models.Model):
     """Model for auto-generated knowledge base entries"""
     

@@ -13,4 +13,8 @@ urlpatterns = [
     path('api/history/', views.ChatHistoryView.as_view(), name='history_api'),
     path('api/analytics/', views.AnalyticsView.as_view(), name='analytics_api'),
     path('api/system-status/', views.SystemStatusView.as_view(), name='system_status_api'),
+    
+    # File handling endpoints
+    path('api/files/', views.FileUploadView.as_view(), name='file_upload_api'),
+    path('api/files/<int:file_id>/', views.FileContentView.as_view(), name='file_content_api'),
 ]

@@ -416,6 +416,98 @@ html, body {
     30% { transform: scale(1.2); opacity: 1; }
 }
 
+/* File upload styles */
+.file-upload-area {
+    margin-bottom: 15px;
+    border: 2px dashed var(--border-light);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    animation: fadeIn 0.3s ease;
+}
+
+.upload-zone {
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.upload-zone:hover {
+    background: var(--bg-hover);
+}
+
+.upload-zone i {
+    font-size: 2rem;
+    color: var(--color-accent);
+    margin-bottom: 10px;
+}
+
+.upload-zone p {
+    margin: 10px 0 5px 0;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.upload-zone small {
+    color: var(--text-muted);
+}
+
+.uploaded-files {
+    margin-bottom: 15px;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-light);
+}
+
+.file-item .file-icon {
+    margin-right: 10px;
+    font-size: 1.2rem;
+    color: var(--color-accent);
+}
+
+.file-item .file-info {
+    flex: 1;
+}
+
+.file-item .file-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.file-item .file-status {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.file-item .file-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.attach-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.attach-button:hover {
+    background: var(--bg-hover);
+    color: var(--color-accent);
+}
+
 /* Input Area */
 .input-area {
     padding: 20px;

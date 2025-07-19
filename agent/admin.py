@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.http import HttpResponseRedirect
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry, ContentFilter, ModerationLog
+from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry, ContentFilter, ModerationLog, FileUpload
 
 
 @admin.register(FAQEntry)
@@ -338,6 +338,45 @@ class ModerationLogAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser  # Only superusers can delete logs
+
+
+@admin.register(FileUpload)
+class FileUploadAdmin(admin.ModelAdmin):
+    list_display = ('original_filename', 'file_type', 'status', 'file_size_display', 'uploaded_at', 'user', 'session_id')
+    list_filter = ('file_type', 'status', 'uploaded_at')
+    search_fields = ('original_filename', 'session_id', 'user__username')
+    readonly_fields = ('original_filename', 'file_size', 'mime_type', 'uploaded_at', 'processed_at')
+    
+    fieldsets = (
+        ('File Information', {
+            'fields': ('file', 'original_filename', 'file_type', 'file_size', 'mime_type')
+        }),
+        ('Processing Status', {
+            'fields': ('status', 'extracted_text', 'analysis_result')
+        }),
+        ('Session & User', {
+            'fields': ('session_id', 'user')
+        }),
+        ('Timestamps', {
+            'fields': ('uploaded_at', 'processed_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def file_size_display(self, obj):
+        """Display file size in human readable format"""
+        size = obj.file_size
+        if size < 1024:
+            return f"{size} bytes"
+        elif size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        else:
+            return f"{size / (1024 * 1024):.1f} MB"
+    file_size_display.short_description = 'File Size'
+    
+    def get_queryset(self, request):
+        """Optimize queryset"""
+        return super().get_queryset(request).select_related('user')
 
 
 # Custom admin site customization

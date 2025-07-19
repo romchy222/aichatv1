@@ -489,8 +489,201 @@ if (window.innerWidth <= 768) {
     });
 }
 
+// File upload functionality
+let uploadedFiles = [];
+
+function initializeFileUpload() {
+    const attachBtn = document.getElementById('attach-btn');
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const uploadedFilesDiv = document.getElementById('uploadedFiles');
+    
+    if (!attachBtn || !fileUploadArea || !fileInput) return;
+    
+    // Toggle file upload area
+    attachBtn.addEventListener('click', function() {
+        fileUploadArea.style.display = fileUploadArea.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    // Handle file input change
+    fileInput.addEventListener('change', function(e) {
+        handleFileUpload(e.target.files);
+    });
+    
+    // Drag and drop functionality
+    const uploadZone = document.querySelector('.upload-zone');
+    if (uploadZone) {
+        uploadZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.background = 'var(--bg-hover)';
+        });
+        
+        uploadZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.background = '';
+        });
+        
+        uploadZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.background = '';
+            handleFileUpload(e.dataTransfer.files);
+        });
+    }
+}
+
+function handleFileUpload(files) {
+    const uploadedFilesDiv = document.getElementById('uploadedFiles');
+    
+    Array.from(files).forEach(file => {
+        // Check file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+            showNotification(`Файл ${file.name} слишком большой (максимум 10MB)`, 'error');
+            return;
+        }
+        
+        // Create file item
+        const fileItem = createFileItem(file);
+        uploadedFilesDiv.appendChild(fileItem);
+        
+        // Upload file
+        uploadFile(file, fileItem);
+    });
+    
+    // Hide upload area after files are selected
+    document.getElementById('fileUploadArea').style.display = 'none';
+}
+
+function createFileItem(file) {
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item';
+    fileItem.innerHTML = `
+        <div class="file-icon">
+            <i class="${getFileIcon(file.name)}"></i>
+        </div>
+        <div class="file-info">
+            <div class="file-name">${file.name}</div>
+            <div class="file-status">Загружается...</div>
+        </div>
+        <div class="file-actions">
+            <button class="btn btn-sm btn-outline-danger" onclick="removeFileItem(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    return fileItem;
+}
+
+function getFileIcon(filename) {
+    const extension = filename.split('.').pop().toLowerCase();
+    const iconMap = {
+        'pdf': 'fas fa-file-pdf',
+        'doc': 'fas fa-file-word',
+        'docx': 'fas fa-file-word',
+        'xls': 'fas fa-file-excel',
+        'xlsx': 'fas fa-file-excel',
+        'csv': 'fas fa-file-csv',
+        'txt': 'fas fa-file-alt',
+        'jpg': 'fas fa-file-image',
+        'jpeg': 'fas fa-file-image',
+        'png': 'fas fa-file-image',
+        'gif': 'fas fa-file-image'
+    };
+    return iconMap[extension] || 'fas fa-file';
+}
+
+function uploadFile(file, fileItem) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('session_id', sessionId);
+    
+    const statusDiv = fileItem.querySelector('.file-status');
+    
+    fetch('/api/files/', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.textContent = 'Обработан';
+            statusDiv.style.color = 'green';
+            
+            // Add to uploaded files list
+            uploadedFiles.push({
+                id: data.file_id,
+                filename: data.filename,
+                summary: data.summary,
+                extracted_text: data.extracted_text
+            });
+            
+            // Show success message
+            showNotification(`Файл ${data.filename} успешно обработан`, 'success');
+            
+            // Add file info to message if text was extracted
+            if (data.extracted_text && data.extracted_text.length > 0) {
+                const messageInput = document.getElementById('message-input');
+                const currentText = messageInput.value;
+                const fileInfo = `[Файл: ${data.filename}] ${data.summary}\n\n`;
+                messageInput.value = fileInfo + currentText;
+            }
+        } else {
+            statusDiv.textContent = 'Ошибка';
+            statusDiv.style.color = 'red';
+            showNotification(`Ошибка обработки файла: ${data.error}`, 'error');
+        }
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Ошибка';
+        statusDiv.style.color = 'red';
+        showNotification(`Ошибка загрузки файла: ${error.message}`, 'error');
+    });
+}
+
+function removeFileItem(button) {
+    const fileItem = button.closest('.file-item');
+    fileItem.remove();
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        min-width: 300px;
+        animation: slideIn 0.3s ease;
+        padding: 12px;
+        border-radius: 8px;
+        background: ${type === 'error' ? '#ff6b6b' : type === 'success' ? '#51cf66' : '#339af0'};
+        color: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    `;
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+        ${message}
+        <button type="button" onclick="this.parentElement.remove()" style="float: right; background: none; border: none; color: white; font-size: 18px; cursor: pointer;">&times;</button>
+    `;
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Make functions global for onclick handlers
+window.removeFileItem = removeFileItem;
+
 // Initialize theme on page load
 document.addEventListener('DOMContentLoaded', function() {
     const savedTheme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
+    initializeFileUpload();
 });

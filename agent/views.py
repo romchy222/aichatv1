@@ -1,5 +1,6 @@
 import json
 import uuid
+import os
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -8,9 +9,13 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib import messages
 from django.db.models import Q
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.utils import timezone
+from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, FileUpload
 from .forms import ChatMessageForm, FAQSearchForm
 from .utils import ChatManager, KnowledgeBaseManager
+from .file_processors import FileProcessorManager
 import logging
 
 logger = logging.getLogger('agent')
@@ -340,6 +345,153 @@ class AnalyticsView(View):
                 for log in recent_logs
             ]
         })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class FileUploadView(View):
+    """API endpoint for file uploads and processing"""
+    
+    def post(self, request):
+        """Handle file upload"""
+        try:
+            if 'file' not in request.FILES:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No file provided'
+                }, status=400)
+            
+            uploaded_file = request.FILES['file']
+            session_id = request.POST.get('session_id', '')
+            
+            # File size limit (10MB)
+            if uploaded_file.size > 10 * 1024 * 1024:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'File size exceeds 10MB limit'
+                }, status=400)
+            
+            # Determine file type
+            file_manager = FileProcessorManager()
+            file_type = file_manager.get_file_type(uploaded_file.name)
+            
+            # Save file
+            file_content = ContentFile(uploaded_file.read())
+            filename = default_storage.save(f'uploads/{uploaded_file.name}', file_content)
+            file_path = default_storage.path(filename)
+            
+            # Get MIME type
+            mime_type = file_manager.get_mime_type(file_path)
+            
+            # Create FileUpload record
+            file_upload = FileUpload.objects.create(
+                file=filename,
+                original_filename=uploaded_file.name,
+                file_type=file_type,
+                file_size=uploaded_file.size,
+                mime_type=mime_type,
+                session_id=session_id,
+                user=request.user if request.user.is_authenticated else None,
+                status='processing'
+            )
+            
+            # Process file
+            try:
+                result = file_manager.process_file(file_path, file_type)
+                
+                if result['success']:
+                    file_upload.extracted_text = result['extracted_text']
+                    file_upload.analysis_result = result['analysis']
+                    file_upload.status = 'completed'
+                else:
+                    file_upload.status = 'failed'
+                    
+                file_upload.processed_at = timezone.now()
+                file_upload.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'file_id': file_upload.id,
+                    'filename': file_upload.original_filename,
+                    'file_type': file_upload.get_file_type_display(),
+                    'summary': result.get('summary', 'Файл обработан'),
+                    'extracted_text': result.get('extracted_text', ''),
+                    'processing_result': result
+                })
+                
+            except Exception as e:
+                logger.error(f"Error processing file {uploaded_file.name}: {e}")
+                file_upload.status = 'failed'
+                file_upload.save()
+                
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Error processing file: {str(e)}'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error uploading file: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Upload failed: {str(e)}'
+            }, status=500)
+    
+    def get(self, request):
+        """Get list of uploaded files for session"""
+        session_id = request.GET.get('session_id', '')
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Session ID required'
+            }, status=400)
+        
+        files = FileUpload.objects.filter(session_id=session_id).order_by('-uploaded_at')[:20]
+        
+        return JsonResponse({
+            'success': True,
+            'files': [
+                {
+                    'id': f.id,
+                    'filename': f.original_filename,
+                    'file_type': f.get_file_type_display(),
+                    'status': f.get_status_display(),
+                    'uploaded_at': f.uploaded_at.isoformat(),
+                    'file_size': f.file_size,
+                    'has_text': bool(f.extracted_text)
+                }
+                for f in files
+            ]
+        })
+
+
+class FileContentView(View):
+    """API endpoint for retrieving file content"""
+    
+    def get(self, request, file_id):
+        """Get extracted content from uploaded file"""
+        try:
+            file_upload = FileUpload.objects.get(id=file_id)
+            
+            return JsonResponse({
+                'success': True,
+                'file_info': {
+                    'id': file_upload.id,
+                    'filename': file_upload.original_filename,
+                    'file_type': file_upload.get_file_type_display(),
+                    'status': file_upload.get_status_display(),
+                    'uploaded_at': file_upload.uploaded_at.isoformat(),
+                    'processed_at': file_upload.processed_at.isoformat() if file_upload.processed_at else None,
+                    'file_size': file_upload.file_size,
+                },
+                'extracted_text': file_upload.extracted_text,
+                'analysis_result': file_upload.analysis_result
+            })
+            
+        except FileUpload.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'File not found'
+            }, status=404)
 
 
 class SystemStatusView(View):
