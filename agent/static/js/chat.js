@@ -272,8 +272,8 @@ async function handleFAQSearch(e) {
         const response = await fetch(`/api/faq/?q=${encodeURIComponent(query)}`);
         const data = await response.json();
         
-        if (data.success && data.results.length > 0) {
-            displayFAQResults(data.results);
+        if (data.success && data.entries.length > 0) {
+            displayFAQResults(data.entries);
         } else {
             resultsContainer.innerHTML = `<div class="welcome-message"><p>${window.translations.no_results}</p></div>`;
         }
