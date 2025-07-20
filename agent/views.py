@@ -31,9 +31,6 @@ class ChatView(View):
     def get(self, request):
         """Render the chat interface"""
         
-        # Check if enhanced version is requested
-        enhanced = request.GET.get('enhanced', 'false').lower() == 'true'
-        
         # Generate or get session ID
         session_id = request.session.get('chat_session_id')
         if not session_id:
@@ -61,16 +58,15 @@ class ChatView(View):
             'session_id': session_id,
         }
         
-        # Choose template based on version
-        template = 'enhanced-chat.html' if enhanced else 'chat.html'
-        return render(request, template, context)
+        # Always use enhanced template as the main interface
+        return render(request, 'enhanced-chat.html', context)
 
 
-class EnhancedChatView(View):
-    """Enhanced chat interface view with all new features"""
+class ClassicChatView(View):
+    """Classic chat interface view (fallback)"""
     
     def get(self, request):
-        """Render the enhanced chat interface"""
+        """Render the classic chat interface"""
         
         # Generate or get session ID
         session_id = request.session.get('chat_session_id')
@@ -99,7 +95,7 @@ class EnhancedChatView(View):
             'session_id': session_id,
         }
         
-        return render(request, 'enhanced-chat.html', context)
+        return render(request, 'chat.html', context)
 
 
 @method_decorator(csrf_exempt, name='dispatch')

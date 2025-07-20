@@ -4,9 +4,9 @@ from . import views, enhanced_views
 app_name = 'agent'
 
 urlpatterns = [
-    # Main chat interface
+    # Main chat interface (now enhanced by default)
     path('', views.ChatView.as_view(), name='chat'),
-    path('enhanced/', views.EnhancedChatView.as_view(), name='enhanced_chat'),
+    path('classic/', views.ClassicChatView.as_view(), name='classic_chat'),
     
     # Core API endpoints
     path('api/chat/', views.ChatAPIView.as_view(), name='chat_api'),

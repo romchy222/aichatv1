@@ -10,6 +10,12 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **July 20, 2025**: Made enhanced interface the default main page
+  - Updated ChatView to always use enhanced-chat.html template
+  - Replaced /enhanced/ route with /classic/ for fallback to old interface
+  - Enhanced interface now accessible at root URL (/) with all modern features
+  - Fixed ChatManager.generate_response method for voice message processing
+  - Resolved JavaScript conflicts and UI error handling
 - **July 19, 2025**: Added comprehensive file upload and processing system
   - Created FileUpload model for tracking uploaded files and processing status
   - Built FileProcessorManager with support for multiple file types:
