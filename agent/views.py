@@ -12,10 +12,14 @@ from django.db.models import Q
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.utils import timezone
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, FileUpload
+from .models import (
+    FAQEntry, ChatSession, ChatMessage, RequestLog, FileUpload,
+    UserProfile, Notification, UserNotification, EventSchedule, Analytics
+)
 from .forms import ChatMessageForm, FAQSearchForm
 from .utils import ChatManager, KnowledgeBaseManager
 from .file_processors import FileProcessorManager
+from .analytics import AnalyticsManager, NotificationManager
 import logging
 
 logger = logging.getLogger('agent')
@@ -546,3 +550,328 @@ class SystemStatusView(View):
                 'total_faq_entries': FAQEntry.objects.filter(is_active=True).count()
             }
         })
+
+
+class AdvancedAnalyticsView(View):
+    """Advanced analytics dashboard for admins"""
+    
+    def get(self, request):
+        """Get comprehensive analytics data"""
+        if not request.user.is_staff:
+            return JsonResponse({
+                'success': False,
+                'error': 'Unauthorized'
+            }, status=403)
+        
+        days = int(request.GET.get('days', 7))
+        analytics_manager = AnalyticsManager()
+        
+        try:
+            dashboard_data = analytics_manager.get_dashboard_data(days)
+            user_insights = analytics_manager.get_user_insights(days)
+            
+            return JsonResponse({
+                'success': True,
+                'dashboard': dashboard_data,
+                'user_insights': user_insights
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating analytics: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to generate analytics'
+            }, status=500)
+
+
+class NotificationAPIView(View):
+    """API for managing notifications"""
+    
+    def get(self, request):
+        """Get user notifications"""
+        session_id = request.GET.get('session_id', '')
+        unread_only = request.GET.get('unread_only', 'false').lower() == 'true'
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Session ID required'
+            }, status=400)
+        
+        try:
+            # Get or create user profile
+            user_profile, created = UserProfile.objects.get_or_create(
+                session_id=session_id,
+                defaults={'preferred_language': 'ru', 'role': 'guest'}
+            )
+            
+            notification_manager = NotificationManager()
+            notifications = notification_manager.get_user_notifications(
+                user_profile, unread_only
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'notifications': [
+                    {
+                        'id': n.id,
+                        'title': n.notification.title,
+                        'message': n.notification.message,
+                        'type': n.notification.notification_type,
+                        'priority': n.notification.priority,
+                        'is_read': n.is_read,
+                        'delivered_at': n.delivered_at.isoformat(),
+                        'read_at': n.read_at.isoformat() if n.read_at else None
+                    }
+                    for n in notifications[:20]  # Limit to 20 notifications
+                ]
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching notifications: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to fetch notifications'
+            }, status=500)
+    
+    @method_decorator(csrf_exempt, name='dispatch')
+    def post(self, request):
+        """Mark notification as read"""
+        try:
+            data = json.loads(request.body)
+            notification_id = data.get('notification_id')
+            session_id = data.get('session_id', '')
+            
+            if not notification_id or not session_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Notification ID and session ID required'
+                }, status=400)
+            
+            user_profile = UserProfile.objects.get(session_id=session_id)
+            user_notification = UserNotification.objects.get(
+                id=notification_id,
+                user_profile=user_profile
+            )
+            
+            user_notification.mark_as_read()
+            
+            return JsonResponse({'success': True})
+            
+        except (UserProfile.DoesNotExist, UserNotification.DoesNotExist):
+            return JsonResponse({
+                'success': False,
+                'error': 'Notification not found'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to update notification'
+            }, status=500)
+
+
+class EventScheduleAPIView(View):
+    """API for event schedule"""
+    
+    def get(self, request):
+        """Get upcoming events"""
+        days_ahead = int(request.GET.get('days', 30))
+        session_id = request.GET.get('session_id', '')
+        
+        try:
+            # Get user profile to filter events by role/faculty
+            user_profile = None
+            if session_id:
+                user_profile = UserProfile.objects.filter(session_id=session_id).first()
+            
+            # Get upcoming events
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            end_date = timezone.now() + timedelta(days=days_ahead)
+            
+            events = EventSchedule.objects.filter(
+                start_datetime__gte=timezone.now(),
+                start_datetime__lte=end_date,
+                is_active=True,
+                is_cancelled=False
+            )
+            
+            # Filter by user profile if available
+            if user_profile and user_profile.role != 'guest':
+                # Filter by faculty if user has one
+                if user_profile.faculty:
+                    events = events.filter(
+                        Q(is_public=True) |
+                        Q(target_faculties__contains=[user_profile.faculty])
+                    )
+                
+                # Filter by course year if user has one
+                if user_profile.course_year:
+                    events = events.filter(
+                        Q(is_public=True) |
+                        Q(target_courses__contains=[user_profile.course_year])
+                    )
+            else:
+                # Show only public events for guests
+                events = events.filter(is_public=True)
+            
+            events = events.order_by('start_datetime')[:50]  # Limit to 50 events
+            
+            return JsonResponse({
+                'success': True,
+                'events': [
+                    {
+                        'id': event.id,
+                        'title': event.title,
+                        'description': event.description,
+                        'event_type': event.event_type,
+                        'start_datetime': event.start_datetime.isoformat(),
+                        'end_datetime': event.end_datetime.isoformat() if event.end_datetime else None,
+                        'is_all_day': event.is_all_day,
+                        'location': event.location,
+                        'room_number': event.room_number,
+                        'is_upcoming': event.is_upcoming()
+                    }
+                    for event in events
+                ]
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching events: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to fetch events'
+            }, status=500)
+
+
+class UserProfileAPIView(View):
+    """API for user profile management"""
+    
+    def get(self, request):
+        """Get user profile"""
+        session_id = request.GET.get('session_id', '')
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Session ID required'
+            }, status=400)
+        
+        try:
+            user_profile, created = UserProfile.objects.get_or_create(
+                session_id=session_id,
+                defaults={
+                    'preferred_language': 'ru',
+                    'role': 'guest'
+                }
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'profile': {
+                    'id': user_profile.id,
+                    'preferred_language': user_profile.preferred_language,
+                    'role': user_profile.role,
+                    'faculty': user_profile.faculty,
+                    'specialization': user_profile.specialization,
+                    'course_year': user_profile.course_year,
+                    'group_number': user_profile.group_number,
+                    'email_notifications': user_profile.email_notifications,
+                    'deadline_reminders': user_profile.deadline_reminders,
+                    'system_announcements': user_profile.system_announcements,
+                    'total_messages': user_profile.total_messages,
+                    'last_active': user_profile.last_active.isoformat(),
+                    'created_at': user_profile.created_at.isoformat()
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching user profile: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to fetch profile'
+            }, status=500)
+    
+    @method_decorator(csrf_exempt, name='dispatch')
+    def post(self, request):
+        """Update user profile"""
+        try:
+            data = json.loads(request.body)
+            session_id = data.get('session_id', '')
+            
+            if not session_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Session ID required'
+                }, status=400)
+            
+            user_profile, created = UserProfile.objects.get_or_create(
+                session_id=session_id,
+                defaults={'preferred_language': 'ru', 'role': 'guest'}
+            )
+            
+            # Update fields if provided
+            updatable_fields = [
+                'preferred_language', 'role', 'faculty', 'specialization',
+                'course_year', 'group_number', 'email_notifications',
+                'deadline_reminders', 'system_announcements'
+            ]
+            
+            updated_fields = []
+            for field in updatable_fields:
+                if field in data:
+                    setattr(user_profile, field, data[field])
+                    updated_fields.append(field)
+            
+            user_profile.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Profile updated: {", ".join(updated_fields)}',
+                'updated_fields': updated_fields
+            })
+            
+        except Exception as e:
+            logger.error(f"Error updating user profile: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to update profile'
+            }, status=500)
+
+
+class MetricsCollectionView(View):
+    """Background endpoint for collecting metrics"""
+    
+    @method_decorator(csrf_exempt, name='dispatch')
+    def post(self, request):
+        """Collect metrics (to be called by cron job or scheduler)"""
+        try:
+            analytics_manager = AnalyticsManager()
+            notification_manager = NotificationManager()
+            
+            # Collect daily metrics
+            daily_metrics = analytics_manager.collect_daily_metrics()
+            
+            # Collect hourly metrics
+            hourly_metrics = analytics_manager.collect_hourly_metrics()
+            
+            # Process notifications
+            notifications_sent = notification_manager.process_scheduled_notifications()
+            reminders_sent = notification_manager.process_event_reminders()
+            
+            return JsonResponse({
+                'success': True,
+                'daily_metrics': daily_metrics,
+                'hourly_metrics': hourly_metrics,
+                'notifications_sent': notifications_sent,
+                'reminders_sent': reminders_sent
+            })
+            
+        except Exception as e:
+            logger.error(f"Error collecting metrics: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to collect metrics'
+            }, status=500)

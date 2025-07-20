@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+import json
 
 
 class FAQEntry(models.Model):
@@ -417,3 +418,225 @@ class KnowledgeBaseEntry(models.Model):
         self.usage_count += 1
         self.last_used = timezone.now()
         self.save(update_fields=['usage_count', 'last_used'])
+
+
+class UserProfile(models.Model):
+    """Extended user profile for personalization"""
+    
+    LANGUAGE_CHOICES = [
+        ('ru', 'Русский'),
+        ('kk', 'Қазақша'),
+        ('en', 'English'),
+    ]
+    
+    ROLE_CHOICES = [
+        ('student', 'Студент'),
+        ('teacher', 'Преподаватель'),
+        ('staff', 'Сотрудник'),
+        ('admin', 'Администратор'),
+        ('guest', 'Гость'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
+    session_id = models.CharField(max_length=100, unique=True, null=True, blank=True)  # For anonymous users
+    
+    # Personal preferences
+    preferred_language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default='ru')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='guest')
+    
+    # Academic information
+    faculty = models.CharField(max_length=100, blank=True)
+    specialization = models.CharField(max_length=100, blank=True)
+    course_year = models.IntegerField(null=True, blank=True, help_text="Курс обучения")
+    group_number = models.CharField(max_length=50, blank=True)
+    
+    # Notification preferences
+    email_notifications = models.BooleanField(default=True)
+    deadline_reminders = models.BooleanField(default=True)
+    system_announcements = models.BooleanField(default=True)
+    
+    # Usage statistics
+    total_messages = models.IntegerField(default=0)
+    last_active = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'User Profile'
+        verbose_name_plural = 'User Profiles'
+        ordering = ['-last_active']
+    
+    def __str__(self):
+        if self.user:
+            return f"{self.user.username} ({self.get_role_display()})"
+        return f"Сессия {self.session_id} ({self.get_role_display()})"
+
+
+class Notification(models.Model):
+    """System notifications and reminders"""
+    
+    TYPE_CHOICES = [
+        ('deadline', 'Дедлайн'),
+        ('exam', 'Экзамен'),
+        ('announcement', 'Объявление'),
+        ('reminder', 'Напоминание'),
+        ('system', 'Системное'),
+        ('achievement', 'Достижение'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', 'Низкий'),
+        ('medium', 'Средний'),
+        ('high', 'Высокий'),
+        ('urgent', 'Срочный'),
+    ]
+    
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='system')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    
+    # Targeting
+    target_roles = models.JSONField(default=list, help_text="Список ролей для уведомления")
+    target_faculties = models.JSONField(default=list, help_text="Список факультетов")
+    target_courses = models.JSONField(default=list, help_text="Список курсов")
+    target_users = models.ManyToManyField(User, blank=True, help_text="Конкретные пользователи")
+    
+    # Scheduling
+    scheduled_for = models.DateTimeField(null=True, blank=True, help_text="Запланировать отправку")
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Срок действия")
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    is_sent = models.BooleanField(default=False)
+    sent_count = models.IntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_notifications')
+    
+    class Meta:
+        verbose_name = 'Notification'
+        verbose_name_plural = 'Notifications'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_priority_display()})"
+
+
+class UserNotification(models.Model):
+    """Individual user notification tracking"""
+    
+    user_profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
+    
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'User Notification'
+        verbose_name_plural = 'User Notifications'
+        unique_together = ['user_profile', 'notification']
+        ordering = ['-delivered_at']
+    
+    def mark_as_read(self):
+        """Mark notification as read"""
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['is_read', 'read_at'])
+
+
+class Analytics(models.Model):
+    """System analytics and usage statistics"""
+    
+    METRIC_TYPES = [
+        ('daily_users', 'Дневная активность'),
+        ('message_count', 'Количество сообщений'),
+        ('response_time', 'Время ответа'),
+        ('popular_topics', 'Популярные темы'),
+        ('error_rate', 'Частота ошибок'),
+        ('satisfaction', 'Удовлетворенность'),
+    ]
+    
+    metric_type = models.CharField(max_length=20, choices=METRIC_TYPES)
+    metric_value = models.FloatField()
+    metadata = models.JSONField(default=dict, help_text="Дополнительная информация")
+    
+    date_recorded = models.DateField()
+    hour_recorded = models.IntegerField(null=True, blank=True, help_text="Час дня (0-23)")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Analytics'
+        verbose_name_plural = 'Analytics'
+        unique_together = ['metric_type', 'date_recorded', 'hour_recorded']
+        ordering = ['-date_recorded', '-hour_recorded']
+    
+    def __str__(self):
+        return f"{self.get_metric_type_display()}: {self.metric_value} ({self.date_recorded})"
+
+
+class EventSchedule(models.Model):
+    """University events, deadlines, and important dates"""
+    
+    EVENT_TYPES = [
+        ('exam', 'Экзамен'),
+        ('deadline', 'Дедлайн'),
+        ('lecture', 'Лекция'),
+        ('seminar', 'Семинар'),
+        ('holiday', 'Праздник'),
+        ('registration', 'Регистрация'),
+        ('meeting', 'Собрание'),
+        ('other', 'Другое'),
+    ]
+    
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES, default='other')
+    
+    # Date and time
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    is_all_day = models.BooleanField(default=False)
+    
+    # Location
+    location = models.CharField(max_length=200, blank=True)
+    room_number = models.CharField(max_length=50, blank=True)
+    
+    # Targeting
+    target_faculties = models.JSONField(default=list)
+    target_courses = models.JSONField(default=list)
+    target_groups = models.JSONField(default=list)
+    is_public = models.BooleanField(default=True)
+    
+    # Reminders
+    reminder_days_before = models.IntegerField(default=1, help_text="За сколько дней напомнить")
+    reminder_sent = models.BooleanField(default=False)
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    is_cancelled = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    
+    class Meta:
+        verbose_name = 'Event Schedule'
+        verbose_name_plural = 'Event Schedules'
+        ordering = ['start_datetime']
+    
+    def __str__(self):
+        return f"{self.title} ({self.start_datetime.strftime('%d.%m.%Y %H:%M')})"
+    
+    def is_upcoming(self):
+        """Check if event is upcoming"""
+        return self.start_datetime > timezone.now()
+    
+    def needs_reminder(self):
+        """Check if reminder should be sent"""
+        if self.reminder_sent or not self.is_active or self.is_cancelled:
+            return False
+        
+        reminder_time = self.start_datetime - timezone.timedelta(days=self.reminder_days_before)
+        return timezone.now() >= reminder_time
