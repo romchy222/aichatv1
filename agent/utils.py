@@ -655,3 +655,40 @@ class ChatManager:
             return list(messages)
         except ChatSession.DoesNotExist:
             return []
+    
+    def generate_response(self, user_message, session_id=None):
+        """Generate a simple AI response without full processing"""
+        
+        try:
+            # Get active system prompt
+            try:
+                system_prompt = SystemPrompt.objects.filter(prompt_type='system', is_active=True).first()
+                system_content = system_prompt.content if system_prompt else """Вы - полезный AI помощник для университета или образовательного учреждения. 
+                Отвечайте на РУССКОМ языке. Будьте краткими и полезными."""
+            except:
+                system_content = """Вы - полезный AI помощник для университета или образовательного учреждения. 
+                Отвечайте на РУССКОМ языке. Будьте краткими и полезными."""
+            
+            # Build messages for AI
+            messages = [
+                {
+                    "role": "system",
+                    "content": system_content
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ]
+            
+            # Generate AI response
+            ai_response = self.ai_client.generate_response(messages)
+            
+            if ai_response.get('success'):
+                return ai_response.get('message', 'Извините, не удалось сгенерировать ответ.')
+            else:
+                return 'Извините, произошла ошибка при обработке вашего сообщения.'
+                
+        except Exception as e:
+            logger.error(f"Error in generate_response: {e}")
+            return 'Извините, произошла ошибка при обработке вашего сообщения.'
