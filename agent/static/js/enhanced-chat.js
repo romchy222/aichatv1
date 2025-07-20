@@ -1,12 +1,12 @@
 // Enhanced AI Chat Assistant with Multimodal Support
-let currentSessionId = null;
-let currentProject = null;
-let messageHistory = [];
-let isTyping = false;
-let currentTheme = 'light';
-let mediaRecorder = null;
-let recordingChunks = [];
-let isRecording = false;
+var currentSessionId = null;
+var currentProject = null;
+var messageHistory = [];
+var isTyping = false;
+var currentTheme = 'light';
+var mediaRecorder = null;
+var recordingChunks = [];
+var isRecording = false;
 
 // Initialize enhanced chat application
 document.addEventListener('DOMContentLoaded', function() {
@@ -695,6 +695,103 @@ function debounce(func, wait) {
 }
 
 function loadChatHistory() {
-    // Implementation from original chat.js
-    console.log('Load chat history');
+    // Load chat history for current session
+    if (!currentSessionId) return;
+    
+    fetch(`/api/history/?session_id=${currentSessionId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.messages) {
+                const container = document.getElementById('messages-container');
+                const welcomeMsg = document.getElementById('welcome-message');
+                if (welcomeMsg && data.messages.length > 0) {
+                    welcomeMsg.style.display = 'none';
+                }
+                
+                data.messages.forEach(msg => {
+                    addMessageToUI(msg.content, msg.message_type);
+                });
+                updateStats();
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load chat history:', error);
+        });
+}
+
+function addMessageToUI(message, type) {
+    const messagesContainer = document.getElementById('messages-container');
+    if (!messagesContainer) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${type}-message`;
+    
+    const avatarIcon = type === 'user' ? 'fas fa-user' : 'fas fa-robot';
+    const timestamp = new Date().toLocaleTimeString('ru-RU', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+    
+    messageElement.innerHTML = `
+        <div class="message-avatar">
+            <i class="${avatarIcon}"></i>
+        </div>
+        <div class="message-content">
+            <div class="message-text">${message}</div>
+            <div class="message-time">${timestamp}</div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(messageElement);
+    scrollToBottom();
+    updateStats();
+}
+
+function showTypingIndicator(customMessage = null) {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) {
+        const text = indicator.querySelector('.typing-text');
+        if (text) {
+            text.textContent = customMessage || 'AI печатает...';
+        }
+        indicator.style.display = 'flex';
+    }
+}
+
+function hideTypingIndicator() {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
+function updateStats() {
+    const messages = document.querySelectorAll('.message');
+    const voiceMessages = document.querySelectorAll('.voice-message');
+    const fileMessages = document.querySelectorAll('.file-message');
+    
+    // Only update if elements exist
+    const elements = {
+        'message-count': messages.length,
+        'voice-count': voiceMessages.length,
+        'file-count': fileMessages.length
+    };
+    
+    Object.entries(elements).forEach(([id, count]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = count;
+        }
+    });
+}
+
+function sendSuggestion(text) {
+    const messageInput = document.getElementById('message-input');
+    if (messageInput) {
+        messageInput.value = text;
+        const form = document.getElementById('chat-form');
+        if (form) {
+            form.dispatchEvent(new Event('submit'));
+        }
+    }
 }

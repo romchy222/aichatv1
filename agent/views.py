@@ -66,6 +66,42 @@ class ChatView(View):
         return render(request, template, context)
 
 
+class EnhancedChatView(View):
+    """Enhanced chat interface view with all new features"""
+    
+    def get(self, request):
+        """Render the enhanced chat interface"""
+        
+        # Generate or get session ID
+        session_id = request.session.get('chat_session_id')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            request.session['chat_session_id'] = session_id
+            
+            # Create new chat session
+            ChatSession.objects.create(
+                session_id=session_id,
+                user=request.user if request.user.is_authenticated else None
+            )
+        
+        # Get chat history
+        chat_manager = ChatManager()
+        chat_history = chat_manager.get_chat_history(session_id)
+        
+        # Initialize forms
+        message_form = ChatMessageForm()
+        search_form = FAQSearchForm()
+        
+        context = {
+            'message_form': message_form,
+            'search_form': search_form,
+            'chat_history': chat_history,
+            'session_id': session_id,
+        }
+        
+        return render(request, 'enhanced-chat.html', context)
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class ChatAPIView(View):
     """API endpoint for handling chat messages"""

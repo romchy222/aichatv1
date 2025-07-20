@@ -6,6 +6,7 @@ app_name = 'agent'
 urlpatterns = [
     # Main chat interface
     path('', views.ChatView.as_view(), name='chat'),
+    path('enhanced/', views.EnhancedChatView.as_view(), name='enhanced_chat'),
     
     # Core API endpoints
     path('api/chat/', views.ChatAPIView.as_view(), name='chat_api'),
