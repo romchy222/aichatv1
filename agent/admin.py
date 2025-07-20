@@ -2,7 +2,12 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.http import HttpResponseRedirect
-from .models import FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, APIKeyConfig, SearchQuery, KnowledgeBaseEntry, ContentFilter, ModerationLog, FileUpload
+from .models import (
+    FAQEntry, ChatSession, ChatMessage, RequestLog, AIModelConfig, SystemPrompt, 
+    APIKeyConfig, SearchQuery, KnowledgeBaseEntry, ContentFilter, ModerationLog, 
+    FileUpload, ChatProject, VoiceMessage, MessageAttachment, ConversationSummary, 
+    UserMood, UserProfile
+)
 
 
 @admin.register(FAQEntry)
@@ -268,8 +273,38 @@ class KnowledgeBaseEntryAdmin(admin.ModelAdmin):
             'fields': ('is_active', 'is_verified')
         }),
         ('Usage Statistics', {
-            'fields': ('usage_count', 'last_used'),
+            'fields': ('usage_count', 'last_used', 'created_at', 'updated_at'),
             'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ('created_at', 'updated_at', 'usage_count', 'last_used')
+    
+    def question_preview(self, obj):
+        """Show preview of question"""
+        return obj.question[:80] + "..." if len(obj.question) > 80 else obj.question
+    question_preview.short_description = 'Question'
+
+
+@admin.register(ChatProject)
+class ChatProjectAdmin(admin.ModelAdmin):
+    list_display = ('name', 'project_type', 'user', 'session_count', 'is_shared', 'created_at')
+    list_filter = ('project_type', 'is_shared', 'created_at')
+    search_fields = ('name', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'session_count')
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'description', 'project_type')
+        }),
+        ('Appearance', {
+            'fields': ('color', 'icon')
+        }),
+        ('Configuration', {
+            'fields': ('custom_prompt', 'allowed_file_types', 'max_context_messages')
+        }),
+        ('Ownership & Sharing', {
+            'fields': ('user', 'session_id', 'is_shared')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -277,46 +312,158 @@ class KnowledgeBaseEntryAdmin(admin.ModelAdmin):
         }),
     )
     
-    readonly_fields = ('usage_count', 'last_used', 'created_at', 'updated_at')
-    
-    def question_preview(self, obj):
-        """Show preview of question"""
-        return obj.question[:80] + "..." if len(obj.question) > 80 else obj.question
-    question_preview.short_description = 'Question'
-    
-    def verify_entry(self, request, queryset):
-        """Custom action to verify selected entries"""
-        queryset.update(is_verified=True)
-        self.message_user(request, f"Verified {queryset.count()} knowledge base entries!")
-    
-    verify_entry.short_description = "Verify selected entries"
-    actions = ['verify_entry']
+    def session_count(self, obj):
+        """Count of sessions in this project"""
+        return obj.sessions.count()
+    session_count.short_description = 'Sessions'
 
 
-@admin.register(ContentFilter)
-class ContentFilterAdmin(admin.ModelAdmin):
-    list_display = ('content_preview', 'filter_type', 'severity', 'language', 'is_active', 'created_at')
-    list_filter = ('filter_type', 'severity', 'language', 'is_active', 'applies_to_ai', 'applies_to_faq', 'applies_to_input')
-    search_fields = ('content', 'replacement')
-    list_editable = ('is_active', 'severity')
+@admin.register(VoiceMessage)
+class VoiceMessageAdmin(admin.ModelAdmin):
+    list_display = ('chat_message', 'duration', 'status', 'confidence', 'detected_language', 'created_at')
+    list_filter = ('status', 'detected_language', 'emotion', 'created_at')
+    search_fields = ('transcription', 'chat_message__content')
+    readonly_fields = ('created_at', 'processed_at')
     
     fieldsets = (
-        ('Filter Configuration', {
-            'fields': ('content', 'filter_type', 'severity', 'replacement', 'is_active')
+        ('Basic Information', {
+            'fields': ('chat_message', 'audio_file', 'duration')
         }),
-        ('Application Settings', {
-            'fields': ('applies_to_ai', 'applies_to_faq', 'applies_to_input', 'language')
+        ('Transcription', {
+            'fields': ('transcription', 'confidence', 'detected_language')
         }),
-        ('Metadata', {
-            'fields': ('created_at', 'updated_at'),
+        ('Processing', {
+            'fields': ('status', 'error_message', 'emotion')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'processed_at'),
             'classes': ('collapse',)
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(MessageAttachment)
+class MessageAttachmentAdmin(admin.ModelAdmin):
+    list_display = ('original_filename', 'attachment_type', 'file_size_display', 'message', 'created_at')
+    list_filter = ('attachment_type', 'mime_type', 'created_at')
+    search_fields = ('original_filename', 'extracted_text')
+    readonly_fields = ('created_at', 'file_size_display')
     
-    def content_preview(self, obj):
-        return f"{obj.content[:30]}..." if len(obj.content) > 30 else obj.content
-    content_preview.short_description = 'Content'
+    fieldsets = (
+        ('File Information', {
+            'fields': ('file', 'original_filename', 'attachment_type', 'file_size_display', 'mime_type')
+        }),
+        ('Analysis Results', {
+            'fields': ('analysis_result', 'extracted_text'),
+            'classes': ('collapse',)
+        }),
+        ('Relationship', {
+            'fields': ('message',)
+        }),
+        ('Timestamp', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def file_size_display(self, obj):
+        """Display file size in human readable format"""
+        size = obj.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+    file_size_display.short_description = 'File Size'
+
+
+@admin.register(ConversationSummary)
+class ConversationSummaryAdmin(admin.ModelAdmin):
+    list_display = ('session', 'project', 'message_count', 'confidence_score', 'created_at')
+    list_filter = ('project', 'generated_by', 'confidence_score', 'created_at')
+    search_fields = ('summary', 'session__session_id')
+    readonly_fields = ('created_at', 'session_title')
+    
+    fieldsets = (
+        ('Summary Information', {
+            'fields': ('session', 'session_title', 'project', 'summary')
+        }),
+        ('Analysis Results', {
+            'fields': ('key_topics', 'action_items', 'message_count')
+        }),
+        ('Date Range', {
+            'fields': ('date_range_start', 'date_range_end')
+        }),
+        ('Generation Details', {
+            'fields': ('generated_by', 'confidence_score', 'created_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def session_title(self, obj):
+        """Get session title"""
+        return obj.session.get_title()
+    session_title.short_description = 'Session Title'
+
+
+@admin.register(UserMood)
+class UserMoodAdmin(admin.ModelAdmin):
+    list_display = ('mood_display', 'confidence', 'session', 'user', 'created_at')
+    list_filter = ('mood', 'confidence', 'created_at')
+    search_fields = ('session__session_id', 'user__username', 'detected_keywords')
+    readonly_fields = ('created_at',)
+    
+    fieldsets = (
+        ('Mood Information', {
+            'fields': ('mood', 'confidence', 'detected_keywords')
+        }),
+        ('Context', {
+            'fields': ('session', 'user', 'message_trigger')
+        }),
+        ('Timestamp', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def mood_display(self, obj):
+        """Display mood with emoji"""
+        return obj.get_mood_display()
+    mood_display.short_description = 'Mood'
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user_display', 'role', 'preferred_language', 'faculty', 'total_messages', 'last_active')
+    list_filter = ('role', 'preferred_language', 'faculty', 'last_active')
+    search_fields = ('user__username', 'faculty', 'specialization', 'group_number')
+    readonly_fields = ('last_active', 'created_at', 'total_messages')
+    
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user', 'session_id', 'role', 'preferred_language')
+        }),
+        ('Academic Information', {
+            'fields': ('faculty', 'specialization', 'course_year', 'group_number')
+        }),
+        ('Notification Preferences', {
+            'fields': ('email_notifications', 'deadline_reminders', 'system_announcements')
+        }),
+        ('Usage Statistics', {
+            'fields': ('total_messages', 'last_active', 'created_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def user_display(self, obj):
+        """Display user or session info"""
+        if obj.user:
+            return f"{obj.user.username} ({obj.user.get_full_name() or obj.user.email})"
+        return f"Session {obj.session_id[:8]}..."
+    user_display.short_description = 'User/Session'
+
+
+# Enhanced admin features successfully configured
 
 
 @admin.register(ModerationLog)

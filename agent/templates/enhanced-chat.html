@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
+    <title>AI Помощник Pro - Расширенный чат</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="{% load static %}{% static 'css/style.css' %}" rel="stylesheet">
+    <link href="{% load static %}{% static 'css/enhanced-chat.css' %}" rel="stylesheet">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+</head>
+<body>
+    <div class="container-fluid enhanced-chat-app">
+        <!-- Enhanced Sidebar -->
+        <div class="enhanced-sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <i class="fas fa-robot"></i>
+                    AI Помощник Pro
+                    <span class="version-badge">v2.0</span>
+                </div>
+                <div class="sidebar-controls">
+                    <button class="theme-toggle" id="theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="sidebar-menu-btn" id="sidebar-menu-btn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Project Selector -->
+            <div class="project-section">
+                <div class="section-title">
+                    <i class="fas fa-folder"></i>
+                    Проекты
+                </div>
+                <div class="project-selector-container">
+                    <select id="project-selector" class="form-select project-selector">
+                        <option value="">Общий чат</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary new-project-btn" id="new-project-btn">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chat History Search -->
+            <div class="search-section">
+                <div class="section-title">
+                    <i class="fas fa-search"></i>
+                    Поиск по истории
+                </div>
+                <div class="search-container">
+                    <input type="text" id="history-search" class="form-control search-input" 
+                           placeholder="Поиск в сообщениях...">
+                    <button class="search-btn" id="search-history-btn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div class="search-results" id="search-results"></div>
+            </div>
+            
+            <!-- FAQ Search -->
+            <div class="faq-search-section">
+                <div class="section-title">
+                    <i class="fas fa-question-circle"></i>
+                    База знаний
+                </div>
+                <input type="text" id="faq-search" class="form-control faq-search-input" 
+                       placeholder="Поиск в базе знаний...">
+                <div class="faq-results" id="faq-results">
+                    <div class="welcome-message">
+                        <p>Введите вопрос для поиска</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="quick-actions-section">
+                <div class="section-title">
+                    <i class="fas fa-bolt"></i>
+                    Быстрые действия
+                </div>
+                <div class="quick-actions">
+                    <button class="btn btn-sm btn-outline-info" id="export-chat-btn">
+                        <i class="fas fa-download"></i>
+                        Экспорт чата
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" id="summary-btn">
+                        <i class="fas fa-list"></i>
+                        Сводка
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" id="mood-analysis-btn">
+                        <i class="fas fa-smile"></i>
+                        Настроение
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chat Stats -->
+            <div class="stats-section">
+                <div class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    Статистика
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-number" id="message-count">0</span>
+                        <span class="stat-label">Сообщений</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="voice-count">0</span>
+                        <span class="stat-label">Голосовых</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="file-count">0</span>
+                        <span class="stat-label">Файлов</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Enhanced Main Chat Area -->
+        <div class="enhanced-chat-container">
+            <!-- Enhanced Chat Header -->
+            <div class="enhanced-chat-header">
+                <div class="chat-title-section">
+                    <button class="mobile-sidebar-toggle d-md-none" id="mobile-sidebar-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="chat-title-info">
+                        <h1 class="chat-title">
+                            <i class="fas fa-comments"></i>
+                            AI Помощник Pro
+                        </h1>
+                        <div class="chat-subtitle" id="chat-subtitle">
+                            Расширенный чат с поддержкой голоса и файлов
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-status-section">
+                    <div class="status-indicators">
+                        <div class="status-item">
+                            <span class="status-indicator online"></span>
+                            <span class="status-text">Онлайн</span>
+                        </div>
+                        <div class="current-mood" id="current-mood" style="display: none;">
+                            <span class="mood-emoji"></span>
+                            <span class="mood-text"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="header-actions">
+                        <button class="btn btn-sm btn-outline-secondary" id="clear-chat-btn">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="settings-btn">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Enhanced Messages Container -->
+            <div class="enhanced-messages-container" id="messages-container">
+                <div class="welcome-message" id="welcome-message">
+                    <div class="welcome-content">
+                        <h2>🚀 Добро пожаловать в AI Помощник Pro!</h2>
+                        <p>Я ваш расширенный помощник с новыми возможностями:</p>
+                        
+                        <div class="feature-highlights">
+                            <div class="feature-item">
+                                <i class="fas fa-microphone"></i>
+                                <span>Голосовые сообщения</span>
+                            </div>
+                            <div class="feature-item">
+                                <i class="fas fa-image"></i>
+                                <span>Анализ изображений</span>
+                            </div>
+                            <div class="feature-item">
+                                <i class="fas fa-folder"></i>
+                                <span>Проекты и темы</span>
+                            </div>
+                            <div class="feature-item">
+                                <i class="fas fa-heart"></i>
+                                <span>Определение настроения</span>
+                            </div>
+                        </div>
+                        
+                        <div class="welcome-suggestions">
+                            <button class="suggestion-button" onclick="sendSuggestion('Покажи мои проекты')">
+                                📁 Мои проекты
+                            </button>
+                            <button class="suggestion-button" onclick="sendSuggestion('Как использовать голосовые сообщения?')">
+                                🎤 Голосовые сообщения
+                            </button>
+                            <button class="suggestion-button" onclick="sendSuggestion('Расписание на завтра')">
+                                📅 Расписание
+                            </button>
+                            <button class="suggestion-button" onclick="sendSuggestion('Помощь с документами')">
+                                📄 Документы
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Enhanced Input Area -->
+            <div class="enhanced-input-area">
+                <!-- File Drop Zone Overlay -->
+                <div class="file-drop-overlay" id="file-drop-overlay">
+                    <div class="drop-content">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <h3>Перетащите файлы сюда</h3>
+                        <p>Поддерживаются изображения, документы и аудио</p>
+                    </div>
+                </div>
+                
+                <!-- Voice Recording Indicator -->
+                <div class="voice-recording-indicator" id="voice-recording-indicator" style="display: none;">
+                    <div class="recording-animation">
+                        <div class="pulse"></div>
+                        <i class="fas fa-microphone"></i>
+                    </div>
+                    <span>Идёт запись голоса...</span>
+                    <button class="btn btn-sm btn-danger stop-recording" onclick="stopVoiceRecording()">
+                        Остановить
+                    </button>
+                </div>
+                
+                <!-- Main Input Container -->
+                <div class="input-container">
+                    <form id="chat-form" class="enhanced-chat-form">
+                        <div class="input-wrapper">
+                            <!-- Attachment Preview Area -->
+                            <div class="attachment-preview" id="attachment-preview" style="display: none;"></div>
+                            
+                            <!-- Main Message Input -->
+                            <div class="message-input-section">
+                                <textarea id="message-input" 
+                                         class="form-control message-input" 
+                                         placeholder="Введите сообщение, прикрепите файл или запишите голосовое сообщение..."
+                                         rows="1"></textarea>
+                                
+                                <!-- Input Tools -->
+                                <div class="input-tools">
+                                    <!-- File Attachment -->
+                                    <button type="button" class="tool-btn" id="file-attach-btn" title="Прикрепить файл">
+                                        <i class="fas fa-paperclip"></i>
+                                    </button>
+                                    
+                                    <!-- Voice Recording -->
+                                    <button type="button" class="tool-btn voice-btn" id="voice-record-btn" title="Голосовая запись">
+                                        <i class="fas fa-microphone"></i>
+                                    </button>
+                                    
+                                    <!-- Image Upload -->
+                                    <button type="button" class="tool-btn" id="image-upload-btn" title="Загрузить изображение">
+                                        <i class="fas fa-image"></i>
+                                    </button>
+                                    
+                                    <!-- Send Button -->
+                                    <button type="submit" class="send-btn" id="send-btn" title="Отправить">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden File Input -->
+                        <input type="file" id="file-input" style="display: none;" 
+                               accept="image/*,application/pdf,.doc,.docx,.txt,.xlsx,.csv" multiple>
+                        
+                        <!-- Hidden Image Input -->
+                        <input type="file" id="image-input" style="display: none;" 
+                               accept="image/*" multiple>
+                    </form>
+                </div>
+                
+                <!-- Input Footer -->
+                <div class="input-footer">
+                    <div class="typing-indicator" id="typing-indicator" style="display: none;">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <span class="typing-text">AI печатает...</span>
+                    </div>
+                    
+                    <div class="input-stats">
+                        <span class="char-count" id="char-count">0/2000</span>
+                        <span class="word-count" id="word-count">0 слов</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Enhanced Modals -->
+    
+    <!-- New Project Modal -->
+    <div class="modal fade" id="newProjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Создать новый проект</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="new-project-form">
+                        <div class="mb-3">
+                            <label for="project-name" class="form-label">Название проекта</label>
+                            <input type="text" class="form-control" id="project-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="project-description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="project-description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="project-type" class="form-label">Тип проекта</label>
+                            <select class="form-select" id="project-type">
+                                <option value="general">Общий</option>
+                                <option value="academic">Учёба</option>
+                                <option value="research">Исследования</option>
+                                <option value="personal">Личное</option>
+                                <option value="work">Работа</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="project-color" class="form-label">Цвет темы</label>
+                            <input type="color" class="form-control form-control-color" id="project-color" value="#0D1B2A">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="create-project-btn">Создать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Export Chat Modal -->
+    <div class="modal fade" id="exportChatModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Экспорт беседы</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="export-options">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="exportFormat" id="exportPDF" value="pdf" checked>
+                            <label class="form-check-label" for="exportPDF">
+                                <i class="fas fa-file-pdf text-danger"></i>
+                                PDF документ
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="exportFormat" id="exportWord" value="docx">
+                            <label class="form-check-label" for="exportWord">
+                                <i class="fas fa-file-word text-primary"></i>
+                                Word документ
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="exportFormat" id="exportText" value="txt">
+                            <label class="form-check-label" for="exportText">
+                                <i class="fas fa-file-alt text-secondary"></i>
+                                Текстовый файл
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="export-settings mt-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeTimestamps" checked>
+                            <label class="form-check-label" for="includeTimestamps">
+                                Включить время сообщений
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeSystemMessages">
+                            <label class="form-check-label" for="includeSystemMessages">
+                                Включить системные сообщения
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-success" id="download-export-btn">
+                        <i class="fas fa-download"></i>
+                        Скачать
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Preview Modal -->
+    <div class="modal fade" id="imagePreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Просмотр изображения</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="modal-image" class="img-fluid" alt="Preview">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notifications Container -->
+    <div class="notifications-container" id="notifications-container"></div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="{% load static %}{% static 'js/themes.js' %}"></script>
+    <script src="{% load static %}{% static 'js/enhanced-chat.js' %}"></script>
+    <script src="{% load static %}{% static 'js/chat.js' %}"></script>
+</body>
+</html>

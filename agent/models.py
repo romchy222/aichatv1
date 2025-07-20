@@ -38,6 +38,9 @@ class ChatSession(models.Model):
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     session_id = models.CharField(max_length=100, unique=True)
+    project = models.ForeignKey('ChatProject', on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions')
+    title = models.CharField(max_length=200, blank=True, help_text="Название беседы")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     last_activity = models.DateTimeField(auto_now=True)
     
@@ -46,6 +49,15 @@ class ChatSession(models.Model):
     
     def __str__(self):
         return f"Session {self.session_id} - {self.created_at}"
+    
+    def get_title(self):
+        """Get session title or generate from first message"""
+        if self.title:
+            return self.title
+        first_message = self.messages.filter(message_type='user').first()
+        if first_message:
+            return first_message.content[:50] + "..." if len(first_message.content) > 50 else first_message.content
+        return f"Сессия {self.session_id[:8]}"
 
 
 class ChatMessage(models.Model):
@@ -55,6 +67,8 @@ class ChatMessage(models.Model):
         ('user', 'User'),
         ('assistant', 'Assistant'),
         ('system', 'System'),
+        ('voice', 'Voice'),
+        ('image', 'Image'),
     ]
     
     session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
@@ -469,6 +483,179 @@ class UserProfile(models.Model):
         if self.user:
             return f"{self.user.username} ({self.get_role_display()})"
         return f"Сессия {self.session_id} ({self.get_role_display()})"
+
+
+class ChatProject(models.Model):
+    """Model for organizing chats into projects/topics"""
+    
+    PROJECT_TYPES = [
+        ('academic', 'Учёба'),
+        ('research', 'Исследования'),
+        ('personal', 'Личное'),
+        ('work', 'Работа'),
+        ('general', 'Общее'),
+    ]
+    
+    name = models.CharField(max_length=100, help_text="Название проекта")
+    description = models.TextField(blank=True, help_text="Описание проекта")
+    project_type = models.CharField(max_length=20, choices=PROJECT_TYPES, default='general')
+    color = models.CharField(max_length=7, default='#0D1B2A', help_text="Цвет темы (hex)")
+    icon = models.CharField(max_length=20, default='fas fa-folder', help_text="FontAwesome иконка")
+    
+    # Project settings
+    custom_prompt = models.TextField(blank=True, help_text="Специальные инструкции для AI")
+    allowed_file_types = models.JSONField(default=list, help_text="Разрешенные типы файлов")
+    max_context_messages = models.IntegerField(default=20, help_text="Максимум сообщений в контексте")
+    
+    # Owner and sharing
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    session_id = models.CharField(max_length=100, null=True, blank=True)
+    is_shared = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Chat Project'
+        verbose_name_plural = 'Chat Projects'
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_project_type_display()})"
+
+
+class VoiceMessage(models.Model):
+    """Model for storing voice messages and transcriptions"""
+    
+    STATUS_CHOICES = [
+        ('uploading', 'Загружается'),
+        ('transcribing', 'Распознается'),
+        ('completed', 'Готово'),
+        ('failed', 'Ошибка'),
+    ]
+    
+    chat_message = models.OneToOneField(ChatMessage, on_delete=models.CASCADE, related_name='voice_data')
+    audio_file = models.FileField(upload_to='voice/%Y/%m/%d/')
+    duration = models.FloatField(help_text="Длительность в секундах")
+    transcription = models.TextField(blank=True, help_text="Расшифровка речи")
+    confidence = models.FloatField(default=0.0, help_text="Уверенность распознавания (0-1)")
+    
+    # Processing status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='uploading')
+    error_message = models.TextField(blank=True)
+    
+    # Voice characteristics (optional)
+    detected_language = models.CharField(max_length=10, blank=True)
+    emotion = models.CharField(max_length=20, blank=True, help_text="Определенная эмоция")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        verbose_name = 'Voice Message'
+        verbose_name_plural = 'Voice Messages'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Голосовое сообщение {self.duration:.1f}с"
+
+
+class MessageAttachment(models.Model):
+    """Model for attachments to chat messages (images, documents, etc.)"""
+    
+    ATTACHMENT_TYPES = [
+        ('image', 'Изображение'),
+        ('document', 'Документ'),
+        ('audio', 'Аудио'),
+        ('video', 'Видео'),
+        ('file', 'Файл'),
+    ]
+    
+    message = models.ForeignKey(ChatMessage, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='attachments/%Y/%m/%d/')
+    attachment_type = models.CharField(max_length=20, choices=ATTACHMENT_TYPES)
+    original_filename = models.CharField(max_length=255)
+    file_size = models.BigIntegerField()
+    mime_type = models.CharField(max_length=100)
+    
+    # AI analysis results
+    analysis_result = models.JSONField(blank=True, null=True, help_text="Результат анализа AI")
+    extracted_text = models.TextField(blank=True, help_text="Извлеченный текст")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Message Attachment'
+        verbose_name_plural = 'Message Attachments'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.original_filename} ({self.get_attachment_type_display()})"
+
+
+class ConversationSummary(models.Model):
+    """Model for storing AI-generated conversation summaries"""
+    
+    session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='summaries')
+    project = models.ForeignKey(ChatProject, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    summary = models.TextField(help_text="Краткое содержание беседы")
+    key_topics = models.JSONField(default=list, help_text="Основные темы обсуждения")
+    action_items = models.JSONField(default=list, help_text="Задачи и действия")
+    
+    # Summary metadata
+    message_count = models.IntegerField(default=0)
+    date_range_start = models.DateTimeField()
+    date_range_end = models.DateTimeField()
+    
+    # AI generation info
+    generated_by = models.CharField(max_length=50, default='ai')
+    confidence_score = models.FloatField(default=0.0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Conversation Summary'
+        verbose_name_plural = 'Conversation Summaries'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Сводка {self.session.session_id[:8]} ({self.message_count} сообщений)"
+
+
+class UserMood(models.Model):
+    """Model for tracking user mood and emotional state"""
+    
+    MOOD_CHOICES = [
+        ('happy', '😊 Радостное'),
+        ('neutral', '😐 Нейтральное'),
+        ('sad', '😢 Грустное'),
+        ('angry', '😠 Злое'),
+        ('excited', '🤩 Взволнованное'),
+        ('confused', '😕 Смущенное'),
+        ('frustrated', '😤 Расстроенное'),
+        ('calm', '😌 Спокойное'),
+    ]
+    
+    session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='mood_tracking')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    
+    mood = models.CharField(max_length=20, choices=MOOD_CHOICES)
+    confidence = models.FloatField(default=0.0, help_text="Уверенность определения (0-1)")
+    
+    # Context
+    message_trigger = models.ForeignKey(ChatMessage, on_delete=models.SET_NULL, null=True, blank=True)
+    detected_keywords = models.JSONField(default=list)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'User Mood'
+        verbose_name_plural = 'User Moods'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_mood_display()} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
 
 class Notification(models.Model):
