@@ -5,11 +5,29 @@ Handles speech-to-text, text-to-speech, and voice message processing
 import os
 import logging
 import tempfile
+import whisper
+import ffmpeg
 from typing import Dict, Any, Optional
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
 logger = logging.getLogger('agent')
+
+# Global Whisper model (loaded once for efficiency)
+_whisper_model = None
+
+def get_whisper_model():
+    """Get the global Whisper model instance"""
+    global _whisper_model
+    if _whisper_model is None:
+        try:
+            # Load the base model (good balance of speed and accuracy)
+            _whisper_model = whisper.load_model("base")
+            logger.info("Whisper model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load Whisper model: {e}")
+            _whisper_model = None
+    return _whisper_model
 
 
 class VoiceProcessor:
@@ -94,37 +112,92 @@ class VoiceProcessor:
     
     def _transcribe_audio(self, audio_file) -> Dict[str, Any]:
         """
-        Transcribe audio to text using available STT service
-        
-        For demo purposes, this returns a placeholder result.
-        In production, integrate with services like:
-        - Google Speech-to-Text
-        - OpenAI Whisper API
-        - Azure Speech Services
-        - Yandex SpeechKit
+        Transcribe audio to text using OpenAI Whisper (free, offline)
         """
         
         try:
-            # Demo implementation - returns placeholder
-            # In production, implement actual STT here
+            # Get Whisper model
+            model = get_whisper_model()
+            if not model:
+                return {
+                    'success': False,
+                    'error': 'Whisper model not available'
+                }
             
-            # Simulate processing time and realistic response
-            filename = audio_file.name if hasattr(audio_file, 'name') else 'audio'
+            # Save audio file to temporary location
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+                # Read audio data
+                if hasattr(audio_file, 'read'):
+                    audio_data = audio_file.read()
+                    audio_file.seek(0)  # Reset file pointer
+                else:
+                    with open(audio_file, 'rb') as f:
+                        audio_data = f.read()
+                
+                temp_file.write(audio_data)
+                temp_file_path = temp_file.name
             
-            # Simple heuristic based on file size for demo confidence
-            file_size = audio_file.size if hasattr(audio_file, 'size') else 1000
-            confidence = min(0.95, max(0.6, file_size / 10000))
-            
-            return {
-                'success': True,
-                'text': f'[Голосовое сообщение - требуется настройка STT сервиса для расшифровки]',
-                'confidence': confidence,
-                'language': 'ru',
-                'duration': get_audio_duration(audio_file)
-            }
+            try:
+                # Convert to WAV format if needed using ffmpeg
+                wav_path = temp_file_path + '_converted.wav'
+                try:
+                    (
+                        ffmpeg
+                        .input(temp_file_path)
+                        .output(wav_path, acodec='pcm_s16le', ac=1, ar='16000')
+                        .overwrite_output()
+                        .run(capture_stdout=True, capture_stderr=True)
+                    )
+                    audio_path = wav_path
+                except Exception as ffmpeg_error:
+                    logger.warning(f"FFmpeg conversion failed, using original: {ffmpeg_error}")
+                    audio_path = temp_file_path
+                
+                # Transcribe with Whisper
+                logger.info("Starting Whisper transcription...")
+                result = model.transcribe(
+                    audio_path,
+                    language='ru',  # Default to Russian
+                    task='transcribe',
+                    fp16=False  # Use fp32 for better compatibility
+                )
+                
+                transcription = result['text'].strip()
+                detected_language = result.get('language', 'ru')
+                
+                # Calculate confidence based on Whisper segments
+                segments = result.get('segments', [])
+                if segments:
+                    avg_confidence = sum(seg.get('avg_logprob', -1) for seg in segments) / len(segments)
+                    # Convert log probability to confidence score (0-1)
+                    confidence = max(0.1, min(0.95, (avg_confidence + 1) * 0.5))
+                else:
+                    confidence = 0.8
+                
+                # Get duration
+                duration = get_audio_duration(audio_file)
+                
+                logger.info(f"Whisper transcription successful: '{transcription[:50]}...' (conf: {confidence:.2f})")
+                
+                return {
+                    'success': True,
+                    'text': transcription,
+                    'confidence': confidence,
+                    'language': detected_language,
+                    'duration': duration
+                }
+                
+            finally:
+                # Cleanup temporary files
+                try:
+                    os.unlink(temp_file_path)
+                    if os.path.exists(wav_path):
+                        os.unlink(wav_path)
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup temp files: {cleanup_error}")
             
         except Exception as e:
-            logger.error(f"STT error: {e}")
+            logger.error(f"Whisper STT error: {e}")
             return {
                 'success': False,
                 'error': f'Speech-to-text failed: {str(e)}'
